@@ -199,6 +199,15 @@ async def health_check():
     return JSONResponse(content={"status": "ok", "ai_configured": client is not None})
 
 
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    """Catch-all: serve React app for any non-API route."""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>Code Review Sage — Backend Running ✅</h1><p>Frontend not built. Visit /docs</p>")
+
+
 @app.post("/api/review")
 async def review_code(request: CodeReviewRequest):
     if not request.code.strip():
