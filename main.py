@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from groq import Groq
+import httpx
 from database import (init_db, create_user, authenticate_user, create_session,
     validate_token, delete_session, save_history, get_user_history,
     delete_history_item, clear_user_history,
@@ -89,6 +90,14 @@ class CodeVisualizeRequest(BaseModel):
     language: str = "python"
 
 class CodeExplainRequest(BaseModel):
+    code: str
+    language: str = "python"
+
+class PatternRequest(BaseModel):
+    code: str
+    language: str
+
+class ExecuteRequest(BaseModel):
     code: str
     language: str = "python"
 
@@ -1173,10 +1182,6 @@ Make the problem interesting, practical, and well-structured. The solution MUST 
 
     result = call_groq(system_prompt, user_prompt)
     return JSONResponse(content={"problem": result, "topic": topic, "difficulty": difficulty})
-
-
-# ──────────────────────────────────────────────
-# Run
 # ──────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
