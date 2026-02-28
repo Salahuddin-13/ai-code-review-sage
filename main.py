@@ -313,12 +313,13 @@ Focus areas: {focus}
     
     # Detect actual language from review text
     detected_language = request.language
-    lang_mismatch = re.search(r"appears to be (\w+)", review_text, re.IGNORECASE)
+    lang_mismatch = re.search(r"appears to be ([\w+#]+)", review_text, re.IGNORECASE)
     if lang_mismatch:
         detected = lang_mismatch.group(1).lower()
         lang_map = {"c": "c", "python": "python", "javascript": "javascript", "java": "java", 
                      "ruby": "ruby", "go": "go", "rust": "rust", "typescript": "typescript",
-                     "c++": "cpp", "cpp": "cpp", "c#": "csharp", "php": "php", "swift": "swift", "kotlin": "kotlin"}
+                     "c++": "cpp", "cpp": "cpp", "c#": "csharp", "csharp": "csharp",
+                     "php": "php", "swift": "swift", "kotlin": "kotlin"}
         if detected in lang_map:
             detected_language = lang_map[detected]
 

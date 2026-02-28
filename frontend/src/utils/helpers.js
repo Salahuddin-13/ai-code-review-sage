@@ -160,4 +160,96 @@ public class UserService {
         return null;
     }
 }`,
+
+    c: `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+struct Node {
+    int data;
+    struct Node* next;
+};
+
+struct Node* head = NULL;
+
+void insertAtBeginning(int value) {
+    struct Node* newNode = (struct Node*)malloc(sizeof(struct Node));
+    newNode->data = value;
+    newNode->next = head;
+    head = newNode;
+}
+
+void display() {
+    struct Node* temp = head;
+    while (temp != NULL) {
+        printf("%d -> ", temp->data);
+        temp = temp->next;
+    }
+    printf("NULL\\n");
+}
+
+char* getInput() {
+    char buffer[256];
+    gets(buffer);
+    return buffer;
+}
+
+int main() {
+    insertAtBeginning(10);
+    insertAtBeginning(20);
+    insertAtBeginning(30);
+    display();
+    char* input = getInput();
+    printf("You entered: %s\\n", input);
+    return 0;
+}`,
+
+    cpp: `#include <iostream>
+#include <vector>
+#include <string>
+using namespace std;
+
+class LinkedList {
+    struct Node {
+        int data;
+        Node* next;
+        Node(int val) : data(val), next(nullptr) {}
+    };
+    Node* head;
+
+public:
+    LinkedList() : head(nullptr) {}
+
+    void insert(int value) {
+        Node* newNode = new Node(value);
+        newNode->next = head;
+        head = newNode;
+    }
+
+    void display() {
+        Node* temp = head;
+        while (temp != nullptr) {
+            cout << temp->data << " -> ";
+            temp = temp->next;
+        }
+        cout << "NULL" << endl;
+    }
+
+    ~LinkedList() {
+        while (head) {
+            Node* temp = head;
+            head = head->next;
+            delete temp;
+        }
+    }
+};
+
+int main() {
+    LinkedList list;
+    list.insert(10);
+    list.insert(20);
+    list.insert(30);
+    list.display();
+    return 0;
+}`,
 };
