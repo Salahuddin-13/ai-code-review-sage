@@ -24,9 +24,10 @@ load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY not found in .env file")
-
-client = Groq(api_key=GROQ_API_KEY)
+    print("⚠️  WARNING: GROQ_API_KEY not found. AI features will not work.")
+    client = None
+else:
+    client = Groq(api_key=GROQ_API_KEY)
 
 MODEL_NAME = "llama-3.3-70b-versatile"
 TEMPERATURE = 0.3
@@ -38,10 +39,10 @@ TOP_P = 0.9
 # ──────────────────────────────────────────────
 app = FastAPI(title="AI Code Review Sage")
 
-# CORS for React dev server
+# CORS — allow all origins in production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -128,6 +129,8 @@ def parse_review_response(review_text: str) -> dict:
 
 
 def call_groq(system_prompt: str, user_prompt: str) -> str:
+    if not client:
+        raise HTTPException(status_code=503, detail="AI service not configured. Set GROQ_API_KEY environment variable.")
     try:
         chat_completion = client.chat.completions.create(
             messages=[
@@ -148,12 +151,17 @@ def call_groq(system_prompt: str, user_prompt: str) -> str:
 # Routes
 # ──────────────────────────────────────────────
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def serve_home():
     index_path = STATIC_DIR / "index.html"
     if index_path.exists():
         return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
-    return HTMLResponse(content="<h1>Run frontend dev server: cd frontend && npm run dev</h1>")
+    return HTMLResponse(content="<h1>Code Review Sage — Backend Running ✅</h1><p>Set up the frontend or visit /docs</p>")
+
+
+@app.get("/health")
+async def health_check():
+    return JSONResponse(content={"status": "ok", "ai_configured": client is not None})
 
 
 @app.post("/api/review")
