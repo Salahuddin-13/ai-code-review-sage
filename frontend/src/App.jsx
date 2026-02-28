@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronRight, Send, X, BarChart3, Code2, BrainCircuit,
   Activity, Shield, Zap, FileCode, Boxes, LogOut, User, ArrowRight,
   Sparkles, Lock, Mail, ChevronUp, Cpu, GitBranch, Terminal, Layers,
-  ArrowLeftRight
+  ArrowLeftRight, Dna, BookOpen, FolderOpen, Play
 } from 'lucide-react';
 import * as api from './utils/api';
 import {
@@ -13,14 +13,19 @@ import {
   downloadFile, copyToClipboard, countLines, countFunctions, SAMPLE_CODES
 } from './utils/helpers';
 import './App.css';
+import Editor from '@monaco-editor/react';
+
+// Monaco language mapping
+const MONACO_LANG = {
+  python: 'python', javascript: 'javascript', java: 'java', c: 'c',
+  cpp: 'cpp', csharp: 'csharp', go: 'go', rust: 'rust',
+  typescript: 'typescript', php: 'php', ruby: 'ruby', swift: 'swift', kotlin: 'kotlin',
+};
 
 const TABS = [
   { id: 'review', label: 'Review', icon: Search },
   { id: 'rewrite', label: 'Rewrite', icon: Wand2 },
-  { id: 'tests', label: 'Tests', icon: FlaskConical },
-  { id: 'visualize', label: 'Visualize', icon: Eye },
-  { id: 'explain', label: 'Explain', icon: GraduationCap },
-  { id: 'debug', label: 'Debug', icon: Bug },
+  { id: 'pattern', label: 'Pattern', icon: Dna },
   { id: 'compare', label: 'Compare', icon: GitCompareArrows },
   { id: 'history', label: 'History', icon: History },
 ];
@@ -43,6 +48,12 @@ const NAV_ITEMS = [
     section: 'Visualization', items: [
       { id: 'visualize', label: 'Code Flow', icon: Eye },
       { id: 'ds-viz', label: 'Data Structures', icon: Boxes },
+    ]
+  },
+  {
+    section: 'Learning', items: [
+      { id: 'practice', label: 'Practice Mode', icon: BookOpen },
+      { id: 'snippets', label: 'My Snippets', icon: FolderOpen },
     ]
   },
   {
@@ -88,6 +99,7 @@ function App() {
   const [currentView, setCurrentView] = useState('main'); // 'main' | 'convert-page'
   const [convertSourceCode, setConvertSourceCode] = useState('');
   const [convertSourceLang, setConvertSourceLang] = useState('c');
+  const [patternData, setPatternData] = useState(null);
 
   // Debug mode
   const [errorMessage, setErrorMessage] = useState('');
@@ -294,6 +306,19 @@ function App() {
     finally { setLoading(null); }
   };
 
+  const handlePattern = async () => {
+    if (!code.trim()) { showToast('⚠️ Please paste some code first'); return; }
+    setLoading({ title: '🧬 Identifying Pattern...', sub: 'Detecting DSA patterns & optimal approaches' });
+    try {
+      const data = await api.identifyPattern(code, language);
+      setPatternData(data);
+      setActiveTab('pattern');
+      saveToHistory('Pattern', code, language);
+      showToast('✅ Pattern identified');
+    } catch (err) { showToast(`❌ ${err.message}`); }
+    finally { setLoading(null); }
+  };
+
   // Chat
   const handleChat = async () => {
     if (!chatInput.trim()) return;
@@ -360,13 +385,16 @@ function App() {
   // Render helpers
   const isLoading = !!loading;
 
+  // Pages that get their own dedicated view (not rendered in main panel)
+  const PAGE_VIEWS = ['convert-page', 'visualize', 'explain', 'tests', 'debug', 'ds-viz', 'practice', 'snippets'];
+
   const renderNavItem = (item) => (
     <button
       key={item.id}
-      className={`nav-item ${currentView === 'main' && activeTab === item.id ? 'active' : ''} ${item.id === 'convert-page' && currentView === 'convert-page' ? 'active' : ''}`}
+      className={`nav-item ${currentView === 'main' && activeTab === item.id ? 'active' : ''} ${currentView === item.id ? 'active' : ''}`}
       onClick={() => {
-        if (item.id === 'convert-page') {
-          setCurrentView('convert-page');
+        if (PAGE_VIEWS.includes(item.id)) {
+          setCurrentView(item.id);
         } else {
           setCurrentView('main');
           setActiveTab(item.id);
@@ -508,30 +536,29 @@ function App() {
                           </button>
                         </div>
                       </div>
-                      <div className="code-editor-wrapper">
-                        <div className="editor-line-numbers" id="editor-line-nums">
-                          {(code || '\n').split('\n').map((_, i) => (
-                            <div key={i} className="editor-line-num">{i + 1}</div>
-                          ))}
-                        </div>
-                        <textarea
-                          className="code-textarea"
+                      <div style={{ flex: 1, minHeight: '300px' }}>
+                        <Editor
+                          height="100%"
+                          language={MONACO_LANG[language] || 'plaintext'}
                           value={code}
-                          onChange={(e) => setCode(e.target.value)}
-                          placeholder={'// Paste your code here...\n// Select a language above\n// Click an action below\n\ndef example():\n    pass'}
-                          spellCheck={false}
-                          onScroll={(e) => {
-                            const lineNums = document.getElementById('editor-line-nums');
-                            if (lineNums) lineNums.scrollTop = e.target.scrollTop;
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Tab') {
-                              e.preventDefault();
-                              const start = e.target.selectionStart;
-                              const end = e.target.selectionEnd;
-                              setCode(code.substring(0, start) + '    ' + code.substring(end));
-                              setTimeout(() => { e.target.selectionStart = e.target.selectionEnd = start + 4; }, 0);
-                            }
+                          onChange={(val) => setCode(val || '')}
+                          theme={theme === 'dark' ? 'vs-dark' : 'light'}
+                          options={{
+                            minimap: { enabled: true },
+                            fontSize: 13,
+                            fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
+                            fontLigatures: true,
+                            scrollBeyondLastLine: false,
+                            automaticLayout: true,
+                            tabSize: 4,
+                            wordWrap: 'on',
+                            padding: { top: 12 },
+                            lineNumbers: 'on',
+                            renderLineHighlight: 'all',
+                            bracketPairColorization: { enabled: true },
+                            smoothScrolling: true,
+                            cursorBlinking: 'smooth',
+                            cursorSmoothCaretAnimation: 'on',
                           }}
                         />
                       </div>
@@ -560,45 +587,16 @@ function App() {
                       </div>
                     </div>
 
-                    {/* Debug Error Input — always show so user can enter error */}
-                    <div style={{
-                      padding: '0.75rem 1rem',
-                      borderTop: '1px solid var(--border)',
-                      background: activeTab === 'debug' ? 'rgba(239,68,68,0.03)' : 'var(--bg-card)',
-                      display: 'flex', gap: '0.5rem', alignItems: 'center',
-                    }}>
-                      <Bug size={14} style={{ color: 'var(--accent-red)', flexShrink: 0 }} />
-                      <textarea
-                        className="error-input"
-                        value={errorMessage}
-                        onChange={(e) => setErrorMessage(e.target.value)}
-                        placeholder="Paste error message / traceback here for Debug mode..."
-                        style={{ minHeight: '50px' }}
-                      />
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="action-buttons" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.35rem' }}>
+                    {/* Action Buttons — Review + Rewrite + Pattern */}
+                    <div className="action-buttons" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
                       <button className="action-btn btn-review" onClick={handleReview} disabled={isLoading}>
                         <Search size={14} /> Review
                       </button>
                       <button className="action-btn btn-rewrite" onClick={handleRewrite} disabled={isLoading}>
                         <Wand2 size={14} /> Rewrite
                       </button>
-                      <button className="action-btn btn-visualize" onClick={handleVisualize} disabled={isLoading}>
-                        <Eye size={14} /> Visualize
-                      </button>
-                      <button className="action-btn btn-explain" onClick={handleExplain} disabled={isLoading}>
-                        <GraduationCap size={14} /> Explain
-                      </button>
-                      <button className="action-btn btn-tests" onClick={handleGenerateTests} disabled={isLoading}>
-                        <FlaskConical size={14} /> Tests
-                      </button>
-                      <button className="action-btn btn-debug" onClick={handleDebug} disabled={isLoading}>
-                        <Bug size={14} /> Debug
-                      </button>
-                      <button className="action-btn btn-visualize" onClick={handleDSVisualize} disabled={isLoading} style={{ gridColumn: 'span 2' }}>
-                        <Boxes size={14} /> DS Viz
+                      <button className="action-btn btn-explain" onClick={handlePattern} disabled={isLoading}>
+                        <Dna size={14} /> Pattern
                       </button>
                     </div>
                   </div>
@@ -616,12 +614,6 @@ function App() {
                           <tab.icon size={13} /> {tab.label}
                         </button>
                       ))}
-                      <button
-                        className={`tab-btn ${activeTab === 'ds-viz' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('ds-viz')}
-                      >
-                        <Boxes size={13} /> DS Viz
-                      </button>
                       <div className="tab-actions" style={{ display: 'flex', gap: '0.35rem', paddingRight: '0.75rem' }}>
                         <button className="toolbar-btn" style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', color: '#818cf8', fontWeight: 600, padding: '0.3rem 0.7rem' }} onClick={() => {
                           let text = '';
@@ -748,55 +740,11 @@ function App() {
                         )
                       )}
 
-                      {/* Tests */}
-                      {activeTab === 'tests' && (
-                        testsData ? (
-                          <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(testsData.tests) }} />
-                        ) : <Placeholder icon={<FlaskConical size={48} />} title="Ready to Generate Tests" text="Click Tests to generate unit tests, edge cases & failure scenarios" />
-                      )}
-
-                      {/* Visualize */}
-                      {activeTab === 'visualize' && (
-                        visualizeData ? (
-                          <div>
-                            <D3Graph data={visualizeData.graph} theme={theme} />
-                            {visualizeData.graph?.summary && (
-                              <div className="prose-output" style={{ marginTop: '1rem' }}
-                                dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML('## 🔍 Code Flow Summary\n' + visualizeData.graph.summary.map(s => `- ${s}`).join('\n')) }}
-                              />
-                            )}
-                          </div>
-                        ) : <Placeholder icon={<Eye size={48} />} title="Ready to Visualize" text="Click Visualize for an interactive code flow graph" />
-                      )}
-
-                      {/* Explain */}
-                      {activeTab === 'explain' && (
-                        explainData ? (
-                          <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(explainData.explanation) }} />
-                        ) : <Placeholder icon={<GraduationCap size={48} />} title="Ready to Explain" text="Click Explain for a detailed code walkthrough" />
-                      )}
-
-                      {/* Debug */}
-                      {activeTab === 'debug' && (
-                        debugData ? (
-                          <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(debugData.debug) }} />
-                        ) : (
-                          <div>
-                            <div style={{ padding: '1rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: '1rem' }}>
-                              <h3 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem' }}>🐞 How Debug Mode Works</h3>
-                              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                                <p><strong>Step 1:</strong> Paste your code in the editor on the left</p>
-                                <p><strong>Step 2:</strong> Paste the error message/traceback in the error box below the editor</p>
-                                <p><strong>Step 3:</strong> Click the <strong>Debug</strong> button</p>
-                                <p style={{ marginTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
-                                  The AI will analyze both your code and the error to explain what went wrong,
-                                  identify the exact line causing the issue, and provide corrected code.
-                                </p>
-                              </div>
-                            </div>
-                            <Placeholder icon={<Bug size={48} />} title="Debug Mode" text="Paste code + error message, then click Debug" />
-                          </div>
-                        )
+                      {/* Pattern */}
+                      {activeTab === 'pattern' && (
+                        patternData ? (
+                          <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(patternData.pattern) }} />
+                        ) : <Placeholder icon={<Dna size={48} />} title="DSA Pattern Identifier" text="Paste your code solution and click Pattern to identify the algorithm pattern" />
                       )}
 
                       {/* Compare */}
@@ -828,13 +776,6 @@ function App() {
                             </div>
                           )}
                         </div>
-                      )}
-
-                      {/* DS Visualizer */}
-                      {activeTab === 'ds-viz' && (
-                        dsVizData ? (
-                          <DSVisualizer data={dsVizData} />
-                        ) : <Placeholder icon={<Boxes size={48} />} title="Data Structure Visualizer" text="Paste code with linked lists, trees or graphs, then click DS Viz" />
                       )}
                     </div>
                   </div>
@@ -898,6 +839,122 @@ function App() {
               loading={loading}
               showToast={showToast}
             />
+          )}
+
+          {/* ── Tool Pages ── */}
+          {currentView === 'visualize' && (
+            <ToolPage
+              title="Code Flow Visualizer" subtitle="Generate interactive flow graphs from your code"
+              icon={<Eye size={18} />} btnLabel="Visualize" btnClass="btn-visualize"
+              onAction={(c, l) => { handleVisualize(); }} actionHandler={handleVisualize}
+              code={code} setCode={setCode} language={language} setLanguage={setLanguage}
+              loading={loading} showToast={showToast} result={
+                visualizeData ? (
+                  <div>
+                    <D3Graph data={visualizeData.graph} theme={theme} />
+                    {visualizeData.graph?.summary && (
+                      <div className="prose-output" style={{ marginTop: '1rem' }}
+                        dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML('## 🔍 Code Flow Summary\n' + visualizeData.graph.summary.map(s => `- ${s}`).join('\n')) }}
+                      />
+                    )}
+                  </div>
+                ) : null
+              }
+              placeholder={<Placeholder icon={<Eye size={48} />} title="Ready to Visualize" text="Paste code and click Visualize for an interactive flow graph" />}
+            />
+          )}
+
+          {currentView === 'explain' && (
+            <ToolPage
+              title="Code Explainer" subtitle="Get a detailed breakdown of how your code works"
+              icon={<GraduationCap size={18} />} btnLabel="Explain" btnClass="btn-explain"
+              onAction={handleExplain} actionHandler={handleExplain}
+              code={code} setCode={setCode} language={language} setLanguage={setLanguage}
+              loading={loading} showToast={showToast} result={
+                explainData ? (
+                  <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(explainData.explanation) }} />
+                ) : null
+              }
+              placeholder={<Placeholder icon={<GraduationCap size={48} />} title="Ready to Explain" text="Paste code and click Explain for a detailed walkthrough" />}
+            />
+          )}
+
+          {currentView === 'tests' && (
+            <ToolPage
+              title="Test Generator" subtitle="Generate unit tests, edge cases & failure scenarios"
+              icon={<FlaskConical size={18} />} btnLabel="Generate Tests" btnClass="btn-tests"
+              onAction={handleGenerateTests} actionHandler={handleGenerateTests}
+              code={code} setCode={setCode} language={language} setLanguage={setLanguage}
+              loading={loading} showToast={showToast} result={
+                testsData ? (
+                  <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(testsData.tests) }} />
+                ) : null
+              }
+              placeholder={<Placeholder icon={<FlaskConical size={48} />} title="Ready to Generate Tests" text="Paste code and click Generate Tests" />}
+            />
+          )}
+
+          {currentView === 'debug' && (
+            <ToolPage
+              title="Debug Mode" subtitle="Paste code + error message for AI-powered debugging"
+              icon={<Bug size={18} />} btnLabel="Debug" btnClass="btn-debug"
+              onAction={handleDebug} actionHandler={handleDebug}
+              code={code} setCode={setCode} language={language} setLanguage={setLanguage}
+              loading={loading} showToast={showToast}
+              extraInput={
+                <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border)', background: 'rgba(239,68,68,0.03)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <Bug size={14} style={{ color: 'var(--accent-red)', flexShrink: 0 }} />
+                  <textarea
+                    className="error-input"
+                    value={errorMessage}
+                    onChange={(e) => setErrorMessage(e.target.value)}
+                    placeholder="Paste error message / traceback here..."
+                    style={{ minHeight: '60px' }}
+                  />
+                </div>
+              }
+              result={
+                debugData ? (
+                  <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(debugData.debug) }} />
+                ) : null
+              }
+              placeholder={
+                <div>
+                  <div style={{ padding: '1rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: '1rem' }}>
+                    <h3 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem' }}>🐞 How Debug Mode Works</h3>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                      <p><strong>Step 1:</strong> Paste your code in the editor</p>
+                      <p><strong>Step 2:</strong> Paste the error message in the error box below</p>
+                      <p><strong>Step 3:</strong> Click the <strong>Debug</strong> button</p>
+                    </div>
+                  </div>
+                  <Placeholder icon={<Bug size={48} />} title="Debug Mode" text="Paste code + error message, then click Debug" />
+                </div>
+              }
+            />
+          )}
+
+          {currentView === 'ds-viz' && (
+            <ToolPage
+              title="Data Structure Visualizer" subtitle="Visualize linked lists, trees, graphs and more"
+              icon={<Boxes size={18} />} btnLabel="Visualize DS" btnClass="btn-visualize"
+              onAction={handleDSVisualize} actionHandler={handleDSVisualize}
+              code={code} setCode={setCode} language={language} setLanguage={setLanguage}
+              loading={loading} showToast={showToast} result={
+                dsVizData ? <DSVisualizer data={dsVizData} /> : null
+              }
+              placeholder={<Placeholder icon={<Boxes size={48} />} title="Data Structure Visualizer" text="Paste code with linked lists, trees or graphs, then click Visualize DS" />}
+            />
+          )}
+
+          {/* ── Practice Mode ── */}
+          {currentView === 'practice' && (
+            <PracticePage theme={theme} language={language} setLanguage={setLanguage} loading={loading} showToast={showToast} />
+          )}
+
+          {/* ── Snippets Manager ── */}
+          {currentView === 'snippets' && (
+            <SnippetsPage theme={theme} showToast={showToast} code={code} language={language} />
           )}
         </div>
 
@@ -990,26 +1047,27 @@ function ConvertPage({ theme, convertSourceCode, setConvertSourceCode, convertSo
                   </button>
                 </div>
               </div>
-              <div className="code-editor-wrapper">
-                <div className="editor-line-numbers">
-                  {(convertSourceCode || '\n').split('\n').map((_, i) => (
-                    <div key={i} className="editor-line-num">{i + 1}</div>
-                  ))}
-                </div>
-                <textarea
-                  className="code-textarea"
+              <div style={{ flex: 1, minHeight: '300px' }}>
+                <Editor
+                  height="100%"
+                  language={MONACO_LANG[convertSourceLang] || 'plaintext'}
                   value={convertSourceCode}
-                  onChange={(e) => setConvertSourceCode(e.target.value)}
-                  placeholder={`// Paste your ${convertSourceLang} code here...`}
-                  spellCheck={false}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Tab') {
-                      e.preventDefault();
-                      const start = e.target.selectionStart;
-                      const end = e.target.selectionEnd;
-                      setConvertSourceCode(convertSourceCode.substring(0, start) + '    ' + convertSourceCode.substring(end));
-                      setTimeout(() => { e.target.selectionStart = e.target.selectionEnd = start + 4; }, 0);
-                    }
+                  onChange={(val) => setConvertSourceCode(val || '')}
+                  theme={theme === 'dark' ? 'vs-dark' : 'light'}
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 13,
+                    fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
+                    fontLigatures: true,
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    tabSize: 4,
+                    wordWrap: 'on',
+                    padding: { top: 12 },
+                    lineNumbers: 'on',
+                    renderLineHighlight: 'all',
+                    bracketPairColorization: { enabled: true },
+                    smoothScrolling: true,
                   }}
                 />
               </div>
@@ -1079,6 +1137,111 @@ function ConvertPage({ theme, convertSourceCode, setConvertSourceCode, convertSo
                 <p>Select source & target languages, paste your code, and click Convert</p>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Reusable Tool Page ── */
+function ToolPage({ title, subtitle, icon, btnLabel, btnClass, onAction, actionHandler, code, setCode, language, setLanguage, loading, showToast, result, placeholder, extraInput }) {
+  const outputRef = useRef(null);
+
+  useEffect(() => {
+    if (outputRef.current) {
+      highlightAllCode(outputRef.current);
+    }
+  }, [result]);
+
+  return (
+    <div className="main-content" style={{ flex: 1 }}>
+      <header className="main-header">
+        <div>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>{icon} {title}</h2>
+          <p>{subtitle}</p>
+        </div>
+      </header>
+
+      <div className="main-body" style={{ overflow: 'hidden' }}>
+        <div className="convert-page-layout">
+          {/* Left: Input */}
+          <div className="convert-input-panel">
+            {/* Language Selector */}
+            <div className="language-bar" style={{ padding: '0.75rem 1rem' }}>
+              <Code2 size={14} style={{ color: 'var(--text-muted)' }} />
+              <select className="lang-select" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                {LANGUAGES.map((l) => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+              </select>
+            </div>
+
+            {/* Code Editor */}
+            <div className="code-editor" style={{ flex: 1 }}>
+              <div className="editor-toolbar">
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div className="window-dots">
+                    <span className="dot-red"></span>
+                    <span className="dot-yellow"></span>
+                    <span className="dot-green"></span>
+                  </div>
+                  <span className="editor-label">Source Code</span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.25rem' }}>
+                  <button className="toolbar-btn" onClick={() => { setCode(SAMPLE_CODES[language] || SAMPLE_CODES.python); showToast(`🧪 Loaded ${language} sample`); }}>
+                    <FlaskConical size={12} /> Sample
+                  </button>
+                  <button className="toolbar-btn" onClick={() => setCode('')}>
+                    <Trash2 size={12} /> Clear
+                  </button>
+                </div>
+              </div>
+              <div style={{ flex: 1, minHeight: '300px' }}>
+                <Editor
+                  height="100%"
+                  language={MONACO_LANG[language] || 'plaintext'}
+                  value={code}
+                  onChange={(val) => setCode(val || '')}
+                  theme="vs-dark"
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 13,
+                    fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
+                    fontLigatures: true,
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    tabSize: 4,
+                    wordWrap: 'on',
+                    padding: { top: 12 },
+                    lineNumbers: 'on',
+                    renderLineHighlight: 'all',
+                    bracketPairColorization: { enabled: true },
+                    smoothScrolling: true,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Extra input (e.g. error message for debug) */}
+            {extraInput}
+
+            {/* Action Button */}
+            <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+              <button
+                className={`action-btn ${btnClass}`}
+                onClick={actionHandler}
+                disabled={!!loading}
+                style={{ width: '100%', padding: '0.75rem', fontSize: '0.85rem' }}
+              >
+                {icon} {btnLabel}
+              </button>
+            </div>
+          </div>
+
+          {/* Right: Output */}
+          <div className="convert-output-panel">
+            <div className="output-content" ref={outputRef} style={{ padding: '1.5rem', overflowY: 'auto', height: '100%' }}>
+              {result || placeholder}
+            </div>
           </div>
         </div>
       </div>
@@ -1667,6 +1830,485 @@ function AuthModal({ mode, onClose, onSwitch, onSuccess }) {
         <div className="auth-switch">
           {isLogin ? "Don't have an account?" : 'Already have an account?'}
           <button onClick={onSwitch}>{isLogin ? 'Sign Up' : 'Sign In'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+/* ── Practice Mode Page (Redesigned) ── */
+const PRACTICE_TOPICS = [
+  { label: 'Arrays', icon: '📊' }, { label: 'Strings', icon: '🔤' },
+  { label: 'Linked Lists', icon: '🔗' }, { label: 'Trees', icon: '🌳' },
+  { label: 'Graphs', icon: '🕸️' }, { label: 'Dynamic Programming', icon: '🧩' },
+  { label: 'Sorting', icon: '📈' }, { label: 'Searching', icon: '🔍' },
+  { label: 'Stack & Queue', icon: '📚' }, { label: 'Hashing', icon: '#️⃣' },
+  { label: 'Recursion', icon: '🔄' }, { label: 'Greedy', icon: '💰' },
+  { label: 'Backtracking', icon: '↩️' }, { label: 'Two Pointers', icon: '👆' },
+  { label: 'Sliding Window', icon: '🪟' }, { label: 'Binary Search', icon: '🎯' },
+  { label: 'Bit Manipulation', icon: '⚙️' }, { label: 'Math', icon: '🧮' },
+];
+const DIFFICULTY_COLORS = {
+  easy: { bg: 'rgba(16,185,129,0.15)', color: '#34d399', border: 'rgba(16,185,129,0.3)' },
+  medium: { bg: 'rgba(245,158,11,0.15)', color: '#fbbf24', border: 'rgba(245,158,11,0.3)' },
+  hard: { bg: 'rgba(239,68,68,0.15)', color: '#f87171', border: 'rgba(239,68,68,0.3)' },
+};
+
+function PracticePage({ theme, language, setLanguage, loading, showToast }) {
+  const [topic, setTopic] = useState('Arrays');
+  const [difficulty, setDifficulty] = useState('medium');
+  const [problemData, setProblemData] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [solutionCode, setSolutionCode] = useState('');
+  const outputRef = useRef(null);
+
+  useEffect(() => {
+    if (outputRef.current) highlightAllCode(outputRef.current);
+  }, [problemData]);
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    setSolutionCode('');
+    try {
+      const data = await api.generatePractice(topic, difficulty, language);
+      setProblemData(data);
+      showToast('✅ Problem generated!');
+    } catch (err) { showToast(`❌ ${err.message}`); }
+    finally { setIsGenerating(false); }
+  };
+
+  const dc = DIFFICULTY_COLORS[difficulty];
+
+  return (
+    <div className="main-content" style={{ flex: 1 }}>
+      <header className="main-header">
+        <div>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><BookOpen size={18} /> Practice Mode</h2>
+          <p>AI-generated DSA problems — solve, learn, master</p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <Code2 size={14} style={{ color: 'var(--text-muted)' }} />
+          <select className="lang-select" value={language} onChange={(e) => setLanguage(e.target.value)}>
+            {LANGUAGES.map((l) => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+          </select>
+        </div>
+      </header>
+
+      <div className="main-body" style={{ overflow: 'hidden' }}>
+        <div className="convert-page-layout">
+          {/* ── Left Panel: Controls + Code Editor ── */}
+          <div className="convert-input-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+            {/* Difficulty Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+              {['easy', 'medium', 'hard'].map((d) => {
+                const c = DIFFICULTY_COLORS[d];
+                return (
+                  <button key={d} onClick={() => setDifficulty(d)}
+                    style={{
+                      flex: 1, padding: '0.6rem', border: 'none', cursor: 'pointer',
+                      background: difficulty === d ? c.bg : 'transparent',
+                      color: difficulty === d ? c.color : 'var(--text-muted)',
+                      fontWeight: difficulty === d ? 700 : 500, fontSize: '0.75rem',
+                      borderBottom: difficulty === d ? `2px solid ${c.color}` : '2px solid transparent',
+                      transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}
+                  >{d}</button>
+                );
+              })}
+            </div>
+
+            {/* Topic Grid */}
+            <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--border)', overflowY: 'auto', maxHeight: '180px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.3rem' }}>
+                {PRACTICE_TOPICS.map((t) => (
+                  <button key={t.label} onClick={() => setTopic(t.label)}
+                    style={{
+                      padding: '0.4rem 0.5rem', borderRadius: '6px',
+                      border: topic === t.label ? `1px solid ${dc.border}` : '1px solid var(--border)',
+                      background: topic === t.label ? dc.bg : 'var(--bg-input)',
+                      color: topic === t.label ? dc.color : 'var(--text-secondary)',
+                      fontWeight: topic === t.label ? 600 : 400, fontSize: '0.68rem',
+                      cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
+                      display: 'flex', alignItems: 'center', gap: '0.3rem',
+                    }}
+                  ><span style={{ fontSize: '0.8rem' }}>{t.icon}</span> {t.label}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Generate Button */}
+            <div style={{ padding: '0.6rem 0.75rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+              <button className="action-btn btn-review" onClick={handleGenerate}
+                disabled={isGenerating || !!loading}
+                style={{ width: '100%', padding: '0.65rem', fontSize: '0.78rem', background: dc.bg, color: dc.color, border: `1px solid ${dc.border}` }}>
+                {isGenerating ? '⏳ Generating...' : `📝 Generate ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} ${topic}`}
+              </button>
+            </div>
+
+            {/* Solution Editor */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <div className="editor-toolbar">
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div className="window-dots">
+                    <span className="dot-red"></span>
+                    <span className="dot-yellow"></span>
+                    <span className="dot-green"></span>
+                  </div>
+                  <span className="editor-label">Your Solution</span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.25rem' }}>
+                  <button className="toolbar-btn" onClick={() => setSolutionCode('')}>
+                    <Trash2 size={12} /> Clear
+                  </button>
+                </div>
+              </div>
+              <div style={{ flex: 1, minHeight: '200px' }}>
+                <Editor
+                  height="100%"
+                  language={MONACO_LANG[language] || 'plaintext'}
+                  value={solutionCode}
+                  onChange={(val) => setSolutionCode(val || '')}
+                  theme={theme === 'dark' ? 'vs-dark' : 'light'}
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 13,
+                    fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    tabSize: 4,
+                    wordWrap: 'on',
+                    padding: { top: 8 },
+                    lineNumbers: 'on',
+                    renderLineHighlight: 'all',
+                    bracketPairColorization: { enabled: true },
+                    smoothScrolling: true,
+                    suggestOnTriggerCharacters: true,
+                    quickSuggestions: true,
+                    acceptSuggestionOnEnter: 'on',
+                    placeholder: `// Write your ${language} solution here...`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ── Right Panel: Problem Display ── */}
+          <div className="convert-output-panel" style={{ overflowY: 'auto' }}>
+            {isGenerating ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1rem' }}>
+                <div className="loading-spinner"></div>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Generating {difficulty} {topic} problem...</p>
+              </div>
+            ) : problemData ? (
+              <div className="output-content" ref={outputRef} style={{ padding: '1.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <span style={{
+                    padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 700,
+                    background: dc.bg, color: dc.color, border: `1px solid ${dc.border}`, textTransform: 'uppercase'
+                  }}>
+                    {difficulty}
+                  </span>
+                  <span style={{
+                    padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 600,
+                    background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)'
+                  }}>
+                    {topic}
+                  </span>
+                </div>
+                <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(problemData.problem) }} />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '2rem' }}>
+                <BookOpen size={56} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: '1rem' }} />
+                <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>Ready to Practice</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', maxWidth: '280px' }}>
+                  Pick a topic and difficulty on the left, then generate a problem. Write your solution in the editor below!
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Snippets Manager Page (Redesigned) ── */
+function SnippetsPage({ theme, showToast, code, language }) {
+  const [snippets, setSnippets] = useState([]);
+  const [folders, setFolders] = useState([]);
+  const [selectedFolder, setSelectedFolder] = useState(null);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [editorCode, setEditorCode] = useState(code || '');
+  const [editorLang, setEditorLang] = useState(language || 'python');
+  const [snippetTitle, setSnippetTitle] = useState('');
+  const [snippetNotes, setSnippetNotes] = useState('');
+  const [viewingSnippet, setViewingSnippet] = useState(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionOutput, setExecutionOutput] = useState(null);
+
+  useEffect(() => {
+    api.getFolders().then(d => setFolders(d.folders || [])).catch(() => { });
+    api.getSnippets().then(d => setSnippets(d.snippets || [])).catch(() => { });
+  }, []);
+
+  // Sync from main editor when component mounts
+  useEffect(() => { if (code) setEditorCode(code); }, [code]);
+  useEffect(() => { if (language) setEditorLang(language); }, [language]);
+
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return;
+    try {
+      await api.createFolder(newFolderName.trim());
+      setNewFolderName('');
+      const d = await api.getFolders();
+      setFolders(d.folders || []);
+      showToast(`📁 Folder "${newFolderName}" created`);
+    } catch (err) { showToast(`❌ ${err.message}`); }
+  };
+
+  const handleSaveSnippet = async () => {
+    if (!snippetTitle.trim()) { showToast('⚠️ Enter a title first'); return; }
+    if (!editorCode.trim()) { showToast('⚠️ Write some code first'); return; }
+    try {
+      await api.saveSnippet(snippetTitle.trim(), editorCode, editorLang, snippetNotes, selectedFolder);
+      setSnippetTitle('');
+      setSnippetNotes('');
+      const d = await api.getSnippets();
+      setSnippets(d.snippets || []);
+      showToast('✅ Snippet saved!');
+    } catch (err) { showToast(`❌ ${err.message}`); }
+  };
+
+  const handleDeleteSnippet = async (id) => {
+    try {
+      await api.deleteSnippet(id);
+      setSnippets(snippets.filter(s => s.id !== id));
+      if (viewingSnippet?.id === id) setViewingSnippet(null);
+      showToast('🗑️ Snippet deleted');
+    } catch (err) { showToast(`❌ ${err.message}`); }
+  };
+
+  const handleExport = (snippet) => {
+    downloadFile(snippet.code, `${snippet.title}.${getFileExtension(snippet.language)}`);
+    showToast('📥 Exported!');
+  };
+
+  const loadSnippetInEditor = (snippet) => {
+    setEditorCode(snippet.code);
+    setEditorLang(snippet.language);
+    setSnippetTitle(snippet.title);
+    setSnippetNotes(snippet.notes || '');
+    setViewingSnippet(null);
+    showToast('📝 Loaded into editor');
+  };
+
+  const filteredSnippets = selectedFolder
+    ? snippets.filter(s => s.folder_id === selectedFolder)
+    : snippets;
+
+  return (
+    <div className="main-content" style={{ flex: 1 }}>
+      <header className="main-header">
+        <div>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><FolderOpen size={18} /> My Snippets</h2>
+          <p>Write, save, organize, and export your code</p>
+        </div>
+      </header>
+
+      <div className="main-body" style={{ overflow: 'hidden' }}>
+        <div className="convert-page-layout">
+          {/* ── Left Panel: Code Editor ── */}
+          <div className="convert-input-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+            {/* Title + Language Bar */}
+            <div style={{ display: 'flex', gap: '0.5rem', padding: '0.6rem 0.75rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)', alignItems: 'center' }}>
+              <input
+                style={{ flex: 1, padding: '0.4rem 0.6rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.78rem' }}
+                value={snippetTitle} onChange={(e) => setSnippetTitle(e.target.value)}
+                placeholder="Snippet title..."
+              />
+              <select className="lang-select" value={editorLang} onChange={(e) => setEditorLang(e.target.value)} style={{ padding: '0.4rem' }}>
+                {LANGUAGES.map((l) => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+              </select>
+            </div>
+
+            {/* Editor Toolbar */}
+            <div className="editor-toolbar">
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div className="window-dots">
+                  <span className="dot-red"></span>
+                  <span className="dot-yellow"></span>
+                  <span className="dot-green"></span>
+                </div>
+                <span className="editor-label">Code Editor</span>
+              </div>
+              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                <button className="toolbar-btn" onClick={async () => {
+                  if (!editorCode.trim()) return;
+                  setIsExecuting(true); setExecutionOutput('Running...');
+                  try {
+                    const result = await api.executeCode(editorCode, editorLang);
+                    setExecutionOutput(result);
+                  } catch (err) { setExecutionOutput(`Error: ${err.message}`); }
+                  finally { setIsExecuting(false); }
+                }} disabled={isExecuting} style={{ color: 'var(--accent-green)' }}>
+                  <Play size={12} fill="currentColor" /> {isExecuting ? 'Running...' : 'Run'}
+                </button>
+                <button className="toolbar-btn" onClick={() => { setEditorCode(SAMPLE_CODES[editorLang] || SAMPLE_CODES.python); showToast(`🧪 Loaded ${editorLang} sample`); }}>
+                  <FlaskConical size={12} /> Sample
+                </button>
+                <button className="toolbar-btn" onClick={() => { setEditorCode(''); setExecutionOutput(null); }}>
+                  <Trash2 size={12} /> Clear
+                </button>
+              </div>
+            </div>
+
+            {/* Monaco Editor */}
+            <div style={{ flex: 1, minHeight: '300px' }}>
+              <Editor
+                height="100%"
+                language={MONACO_LANG[editorLang] || 'plaintext'}
+                value={editorCode}
+                onChange={(val) => setEditorCode(val || '')}
+                theme={theme === 'dark' ? 'vs-dark' : 'light'}
+                options={{
+                  minimap: { enabled: true },
+                  fontSize: 13,
+                  fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
+                  fontLigatures: true,
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 4,
+                  wordWrap: 'on',
+                  padding: { top: 8 },
+                  lineNumbers: 'on',
+                  renderLineHighlight: 'all',
+                  bracketPairColorization: { enabled: true },
+                  smoothScrolling: true,
+                  suggestOnTriggerCharacters: true,
+                  quickSuggestions: { other: true, comments: false, strings: false },
+                  acceptSuggestionOnEnter: 'on',
+                  cursorBlinking: 'smooth',
+                  cursorSmoothCaretAnimation: 'on',
+                }}
+              />
+            </div>
+
+            {/* Execution Output Panel */}
+            {executionOutput !== null && (
+              <div style={{ padding: '0.75rem', background: '#0d1117', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', maxHeight: '150px', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent-green)' }}>Output</span>
+                  <button className="toolbar-btn" onClick={() => setExecutionOutput(null)} style={{ padding: '0.2rem' }}><Trash2 size={11} /></button>
+                </div>
+                <pre style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, fontFamily: "'Fira Code', monospace" }}>
+                  {executionOutput}
+                </pre>
+              </div>
+            )}
+
+            {/* Notes + Save Bar */}
+            <div style={{ padding: '0.6rem 0.75rem', borderTop: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+              <input
+                style={{ width: '100%', padding: '0.35rem 0.6rem', marginBottom: '0.5rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.72rem' }}
+                value={snippetNotes} onChange={(e) => setSnippetNotes(e.target.value)}
+                placeholder="Notes (optional)..."
+              />
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <select style={{ padding: '0.4rem 0.6rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.72rem' }}
+                  value={selectedFolder || ''} onChange={(e) => setSelectedFolder(e.target.value ? parseInt(e.target.value) : null)}>
+                  <option value="">No folder</option>
+                  {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+                <button className="action-btn btn-review" onClick={handleSaveSnippet}
+                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.78rem' }}>
+                  💾 Save Snippet
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Right Panel: Folders + Snippets List ── */}
+          <div className="convert-output-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+            {/* Folder bar */}
+            <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Folders</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.5rem' }}>
+                <button onClick={() => setSelectedFolder(null)}
+                  style={{
+                    padding: '0.25rem 0.6rem', borderRadius: '999px', fontSize: '0.68rem', cursor: 'pointer',
+                    border: !selectedFolder ? '1px solid rgba(99,102,241,0.4)' : '1px solid var(--border)',
+                    background: !selectedFolder ? 'rgba(99,102,241,0.12)' : 'var(--bg-input)',
+                    color: !selectedFolder ? '#818cf8' : 'var(--text-secondary)',
+                    fontWeight: !selectedFolder ? 600 : 400,
+                  }}>All ({snippets.length})</button>
+                {folders.map(f => (
+                  <button key={f.id} onClick={() => setSelectedFolder(f.id)}
+                    style={{
+                      padding: '0.25rem 0.6rem', borderRadius: '999px', fontSize: '0.68rem', cursor: 'pointer',
+                      border: selectedFolder === f.id ? '1px solid rgba(99,102,241,0.4)' : '1px solid var(--border)',
+                      background: selectedFolder === f.id ? 'rgba(99,102,241,0.12)' : 'var(--bg-input)',
+                      color: selectedFolder === f.id ? '#818cf8' : 'var(--text-secondary)',
+                      fontWeight: selectedFolder === f.id ? 600 : 400,
+                    }}>{f.name}</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                <input
+                  style={{ flex: 1, padding: '0.3rem 0.5rem', fontSize: '0.68rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
+                  value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
+                  placeholder="New folder..." onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
+                />
+                <button className="toolbar-btn" onClick={handleCreateFolder} style={{ padding: '0.3rem 0.5rem', fontSize: '0.68rem' }}>+ Add</button>
+              </div>
+            </div>
+
+            {/* Snippets list */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
+              {filteredSnippets.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '2rem' }}>
+                  <FolderOpen size={48} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: '0.75rem' }} />
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.35rem' }}>No Snippets Yet</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Write code in the editor and click "Save Snippet"</p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: '0.4rem' }}>
+                  {filteredSnippets.map(s => (
+                    <div key={s.id}
+                      style={{
+                        padding: '0.6rem 0.75rem', background: 'var(--bg-input)', border: '1px solid var(--border)',
+                        borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div onClick={() => loadSnippetInEditor(s)} style={{ flex: 1, cursor: 'pointer' }}>
+                          <div style={{ fontWeight: 600, fontSize: '0.78rem' }}>{s.title}</div>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                            <span style={{ padding: '0.1rem 0.35rem', borderRadius: '4px', background: 'rgba(99,102,241,0.1)', color: '#818cf8', fontSize: '0.6rem', fontWeight: 600 }}>{s.language}</span>
+                            <span style={{ marginLeft: '0.4rem' }}>{s.created_at}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.2rem', flexShrink: 0 }}>
+                          <button className="toolbar-btn" title="Load in editor" onClick={() => loadSnippetInEditor(s)} style={{ padding: '0.25rem' }}>
+                            <Code2 size={11} />
+                          </button>
+                          <button className="toolbar-btn" title="Export" onClick={() => handleExport(s)} style={{ padding: '0.25rem' }}>
+                            <Download size={11} />
+                          </button>
+                          <button className="toolbar-btn" title="Copy" onClick={() => { copyToClipboard(s.code).then(() => showToast('📋 Copied!')); }} style={{ padding: '0.25rem' }}>
+                            <Copy size={11} />
+                          </button>
+                          <button className="toolbar-btn" title="Delete" onClick={() => handleDeleteSnippet(s.id)} style={{ padding: '0.25rem', color: 'var(--accent-red)' }}>
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      </div>
+                      {s.notes && <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{s.notes}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -71,6 +71,32 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_user ON history(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
 
+    # Snippets & Folders tables
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS folders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS snippets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            folder_id INTEGER,
+            title TEXT NOT NULL,
+            code TEXT NOT NULL,
+            language TEXT NOT NULL,
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
+        )
+    """)
+
     conn.commit()
     conn.close()
     print("✅ Database initialized")
@@ -246,3 +272,63 @@ def clear_user_history(user_id: int):
     conn.execute("DELETE FROM history WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
+
+
+# ──────────────────────────────────────────────
+# Snippets & Folders
+# ──────────────────────────────────────────────
+
+def create_folder(user_id: int, name: str):
+    conn = get_db()
+    cursor = conn.execute("INSERT INTO folders (user_id, name) VALUES (?, ?)", (user_id, name))
+    folder_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return folder_id
+
+
+def get_user_folders(user_id: int):
+    conn = get_db()
+    rows = conn.execute("SELECT id, name, created_at FROM folders WHERE user_id = ? ORDER BY name", (user_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def delete_folder(user_id: int, folder_id: int):
+    conn = get_db()
+    conn.execute("DELETE FROM snippets WHERE user_id = ? AND folder_id = ?", (user_id, folder_id))
+    r = conn.execute("DELETE FROM folders WHERE id = ? AND user_id = ?", (folder_id, user_id))
+    conn.commit()
+    conn.close()
+    return r.rowcount > 0
+
+
+def save_snippet(user_id: int, title: str, code: str, language: str, notes: str = "", folder_id: int = None):
+    conn = get_db()
+    cursor = conn.execute(
+        "INSERT INTO snippets (user_id, folder_id, title, code, language, notes) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, folder_id, title, code, language, notes)
+    )
+    snippet_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return snippet_id
+
+
+def get_user_snippets(user_id: int):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, folder_id, title, code, language, notes, created_at FROM snippets WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def delete_snippet(user_id: int, snippet_id: int):
+    conn = get_db()
+    r = conn.execute("DELETE FROM snippets WHERE id = ? AND user_id = ?", (snippet_id, user_id))
+    conn.commit()
+    conn.close()
+    return r.rowcount > 0
+

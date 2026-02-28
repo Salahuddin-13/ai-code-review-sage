@@ -144,3 +144,68 @@ export function visualizeDS(code, language) {
 export function convertCode(code, language, targetLanguage) {
   return apiCall('convert', { code, language, target_language: targetLanguage });
 }
+
+export function identifyPattern(code, language) {
+  return apiCall('pattern', { code, language });
+}
+
+export function generatePractice(topic, difficulty, language) {
+  return apiCall('practice', { topic, difficulty, language });
+}
+
+// ── Snippets API ──
+export function getSnippets() {
+  return apiCall('snippets', null, 'GET', true);
+}
+
+export function saveSnippet(title, code, language, notes = '', folderId = null) {
+  return apiCall('snippets', { title, code, language, notes, folder_id: folderId }, 'POST', true);
+}
+
+export function deleteSnippet(id) {
+  return fetch(`${API_BASE}/snippets/${id}`, { method: 'DELETE', headers: getHeaders(true) }).then(r => r.json());
+}
+
+export function getFolders() {
+  return apiCall('folders', null, 'GET', true);
+}
+
+export function createFolder(name) {
+  return apiCall('folders', { name }, 'POST', true);
+}
+
+export function deleteFolder(id) {
+  return fetch(`${API_BASE}/folders/${id}`, { method: 'DELETE', headers: getHeaders(true) }).then(r => r.json());
+}
+
+// ── Code Execution API (Piston) ──
+export async function executeCode(code, language) {
+  const langMap = {
+    python: 'python', javascript: 'javascript', java: 'java', cpp: 'cpp', c: 'c',
+    go: 'go', rust: 'rust', php: 'php', ruby: 'ruby', swift: 'swift', csharp: 'csharp',
+    kotlin: 'kotlin', typescript: 'typescript', html: 'html' // note: HTML doesn't run well in piston directly but we map it
+  };
+  const versionMap = {
+    python: '3.10.0', javascript: '18.15.0', java: '15.0.2', cpp: '10.2.0', c: '10.2.0',
+    go: '1.16.2', rust: '1.68.2', php: '8.2.3', ruby: '3.0.1', swift: '5.3.3',
+    csharp: '6.12.0', kotlin: '1.8.20', typescript: '5.0.3'
+  };
+
+  const pistonLang = langMap[language] || language;
+  const version = versionMap[language] || '*';
+
+  const res = await fetch('https://emkc.org/api/v2/piston/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      language: pistonLang,
+      version: version,
+      files: [{ content: code }]
+    })
+  });
+
+  if (!res.ok) throw new Error('Execution engine failed');
+  const data = await res.json();
+  if (data.run?.stderr && !data.run?.stdout) throw new Error(data.run.stderr);
+  return data.run?.stdout || data.run?.stderr || 'Code executed successfully (no output)';
+}

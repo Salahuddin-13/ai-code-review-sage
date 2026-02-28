@@ -7,6 +7,7 @@ With database-backed auth and history.
 import os
 import re
 import json
+import time
 import uvicorn
 from pathlib import Path
 from dotenv import load_dotenv
@@ -17,7 +18,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from groq import Groq
-from database import init_db, create_user, authenticate_user, create_session, validate_token, delete_session, save_history, get_user_history, delete_history_item, clear_user_history
+from database import (init_db, create_user, authenticate_user, create_session,
+    validate_token, delete_session, save_history, get_user_history,
+    delete_history_item, clear_user_history,
+    create_folder, get_user_folders, delete_folder as db_delete_folder,
+    save_snippet, get_user_snippets, delete_snippet as db_delete_snippet)
 
 # ──────────────────────────────────────────────
 # Configuration
@@ -164,8 +169,8 @@ def call_groq(system_prompt: str, user_prompt: str) -> str:
     if not client:
         raise HTTPException(status_code=503, detail="AI service not configured. Set GROQ_API_KEY environment variable.")
 
-    def _make_request(groq_client):
-        chat_completion = groq_client.chat.completions.create(
+    def _make_request(ai_client):
+        chat_completion = ai_client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -177,18 +182,31 @@ def call_groq(system_prompt: str, user_prompt: str) -> str:
         )
         return chat_completion.choices[0].message.content
 
-    try:
-        return _make_request(client)
-    except Exception as e:
-        error_str = str(e)
-        # If rate limited (429) and we have a fallback key, try that
-        if ("429" in error_str or "rate_limit" in error_str.lower()) and fallback_client:
-            print(f"⚠️ Primary key rate-limited, switching to fallback key...")
-            try:
-                return _make_request(fallback_client)
-            except Exception as e2:
-                raise HTTPException(status_code=500, detail=f"API error (both keys failed): {str(e2)}")
-        raise HTTPException(status_code=500, detail=f"API error: {error_str}")
+    # Retry with exponential backoff for rate limits (free tier can be flaky)
+    max_retries = 3
+    for attempt in range(max_retries + 1):
+        try:
+            return _make_request(client)
+        except Exception as e:
+            error_str = str(e)
+            is_rate_limited = "429" in error_str or "rate_limit" in error_str.lower()
+
+            # If rate limited, retry with backoff before giving up
+            if is_rate_limited and attempt < max_retries:
+                wait_time = 2 ** (attempt + 1)  # 2s, 4s, 8s
+                print(f"⚠️ Rate limited (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+
+            # Try fallback key if available
+            if is_rate_limited and fallback_client:
+                print(f"⚠️ Primary key exhausted retries, switching to fallback key...")
+                try:
+                    return _make_request(fallback_client)
+                except Exception as e2:
+                    raise HTTPException(status_code=500, detail=f"API error (both keys failed): {str(e2)}")
+
+            raise HTTPException(status_code=500, detail=f"API error: {error_str}")
 
 
 def get_current_user(request: Request) -> dict | None:
@@ -282,6 +300,11 @@ For each issue use this format:
 
 ## 💡 Summary & Recommendations
 Provide 3-5 key takeaways as bullet points.
+
+## ⏱️ Complexity Analysis
+- **Time Complexity**: O(?) — explain why
+- **Space Complexity**: O(?) — explain why
+- **Optimization Suggestion**: If complexity can be improved, explain how (e.g., "Use a hashmap to reduce from O(n²) to O(n)")
 
 IMPORTANT RULES:
 - Use proper markdown headings (##)
@@ -764,8 +787,8 @@ WHEN ANSWERING:
 
     messages.append({"role": "user", "content": request.message})
 
-    def _chat_request(groq_client):
-        chat_completion = groq_client.chat.completions.create(
+    def _chat_request(ai_client):
+        chat_completion = ai_client.chat.completions.create(
             messages=messages,
             model=MODEL_NAME,
             temperature=TEMPERATURE,
@@ -951,6 +974,205 @@ async def clear_history(request: Request):
 
     clear_user_history(user["id"])
     return JSONResponse(content={"ok": True})
+
+
+# ──────────────────────────────────────────────
+# Snippets & Folders API
+# ──────────────────────────────────────────────
+
+@app.get("/api/folders")
+async def list_folders(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+    folders = get_user_folders(user["id"])
+    return JSONResponse(content={"folders": folders})
+
+
+@app.post("/api/folders")
+async def add_folder(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+    body = await request.json()
+    name = body.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Folder name required")
+    folder_id = create_folder(user["id"], name)
+    return JSONResponse(content={"id": folder_id, "ok": True})
+
+
+@app.delete("/api/folders/{folder_id}")
+async def remove_folder(folder_id: int, request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+    deleted = db_delete_folder(user["id"], folder_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    return JSONResponse(content={"ok": True})
+
+
+@app.get("/api/snippets")
+async def list_snippets(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+    snippets = get_user_snippets(user["id"])
+    return JSONResponse(content={"snippets": snippets})
+
+
+@app.post("/api/snippets")
+async def add_snippet(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+    body = await request.json()
+    title = body.get("title", "").strip()
+    code_text = body.get("code", "").strip()
+    lang = body.get("language", "python")
+    notes = body.get("notes", "")
+    folder_id = body.get("folder_id")
+    if not title or not code_text:
+        raise HTTPException(status_code=400, detail="Title and code required")
+    snippet_id = save_snippet(user["id"], title, code_text, lang, notes, folder_id)
+    return JSONResponse(content={"id": snippet_id, "ok": True})
+
+
+@app.delete("/api/snippets/{snippet_id}")
+async def remove_snippet(snippet_id: int, request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+    deleted = db_delete_snippet(user["id"], snippet_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Snippet not found")
+    return JSONResponse(content={"ok": True})
+
+
+@app.post("/api/pattern")
+async def identify_pattern(request: CodeReviewRequest):
+    """Identify DSA patterns in a code solution."""
+    if not request.code.strip():
+        raise HTTPException(status_code=400, detail="Code cannot be empty")
+
+    system_prompt = """You are an expert DSA (Data Structures & Algorithms) coach and competitive programming mentor.
+Analyze the given code solution and identify the algorithmic patterns used.
+
+Format your response EXACTLY in this markdown structure:
+
+## 🧬 Pattern Identified
+**Primary Pattern**: [Name of the pattern, e.g., Sliding Window, Two Pointers, DFS, Dynamic Programming, Greedy, etc.]
+**Secondary Pattern**: [If applicable, e.g., Hashing, Binary Search]
+
+## ⏱️ Complexity Analysis
+- **Time Complexity**: O(?) — explain why
+- **Space Complexity**: O(?) — explain why
+
+## 🚀 Better Approach
+If there's a more optimal approach:
+- **Pattern**: [Better pattern to use]
+- **Time Complexity**: O(?)
+- **Space Complexity**: O(?)
+- **How it works**: Brief explanation
+- **Code sketch**: Short pseudocode or code snippet
+
+If the current approach is already optimal, say "✅ This is already the optimal approach."
+
+## 📚 Related Problems
+List 3-5 similar problems that use the same pattern:
+1. **Problem Name** — Brief description (Difficulty)
+2. etc.
+
+## 💡 Key Takeaway
+One or two sentences summarizing when to use this pattern.
+
+Be concise, practical, and helpful for a student learning DSA."""
+
+    user_prompt = f"""Analyze this {request.language} code solution and identify the DSA patterns:
+
+```{request.language}
+{request.code}
+```"""
+
+    result = call_groq(system_prompt, user_prompt)
+    return JSONResponse(content={"pattern": result, "language": request.language})
+
+
+@app.post("/api/practice")
+async def generate_practice(request: Request):
+    """Generate practice problems by topic and difficulty."""
+    body = await request.json()
+    topic = body.get("topic", "arrays")
+    difficulty = body.get("difficulty", "medium")
+    language = body.get("language", "python")
+
+    system_prompt = f"""You are a competitive programming coach. Generate a practice problem.
+
+Format your response EXACTLY in this markdown structure:
+
+## 📋 Problem: [Creative Problem Title]
+**Difficulty**: {difficulty.upper()}
+**Topic**: {topic}
+**Pattern**: [The DSA pattern needed]
+
+### Description
+Write a clear problem statement with context.
+
+### Constraints
+- List key constraints (input ranges, time limits, etc.)
+
+### Examples
+**Example 1:**
+```
+Input: ...
+Output: ...
+Explanation: ...
+```
+
+**Example 2:**
+```
+Input: ...
+Output: ...
+```
+
+### 💡 Hints
+<details>
+<summary>Hint 1</summary>
+[First hint - approach direction]
+</details>
+
+<details>
+<summary>Hint 2</summary>
+[Second hint - more specific]
+</details>
+
+<details>
+<summary>Hint 3</summary>
+[Third hint - nearly gives it away]
+</details>
+
+### ✅ Solution
+<details>
+<summary>Click to reveal solution</summary>
+
+```{language}
+[Complete, working solution code]
+```
+
+**Explanation:**
+[Brief explanation of the approach]
+
+**Time Complexity**: O(?)
+**Space Complexity**: O(?)
+</details>
+
+Make the problem interesting, practical, and well-structured. The solution MUST be correct and complete."""
+
+    user_prompt = f"Generate a {difficulty} {topic} problem solvable in {language}."
+
+    result = call_groq(system_prompt, user_prompt)
+    return JSONResponse(content={"problem": result, "topic": topic, "difficulty": difficulty})
 
 
 # ──────────────────────────────────────────────
