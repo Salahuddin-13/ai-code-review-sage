@@ -1,18 +1,27 @@
-# Byte-compiled
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-
-# Environment
+*.env
 .env
-.venv/
 venv/
-env/
+.venv/
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Build output (include dist for deployment)
+# frontend/dist/
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
