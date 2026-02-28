@@ -1,6 +1,7 @@
 """
 AI Code Review Sage — FastAPI Backend
 All AI endpoints for code review, rewrite, test generation, debugging, metrics, chat, visualization
+With database-backed auth and history.
 """
 
 import os
@@ -9,13 +10,14 @@ import json
 import uvicorn
 from pathlib import Path
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from groq import Groq
+from database import init_db, create_user, authenticate_user, create_session, validate_token, delete_session, save_history, get_user_history, delete_history_item, clear_user_history
 
 # ──────────────────────────────────────────────
 # Configuration
@@ -38,6 +40,9 @@ TOP_P = 0.9
 # FastAPI App
 # ──────────────────────────────────────────────
 app = FastAPI(title="AI Code Review Sage")
+
+# Initialize database on startup
+init_db()
 
 # CORS — allow all origins in production
 app.add_middleware(
@@ -99,6 +104,27 @@ class DSVisualizeRequest(BaseModel):
     code: str
     language: str = "python"
 
+class CodeConvertRequest(BaseModel):
+    code: str
+    language: str = "python"
+    target_language: str = "javascript"
+
+# Auth Models
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class HistorySaveRequest(BaseModel):
+    action: str
+    language: str
+    code: str
+    result_preview: str = ""
+
 # ──────────────────────────────────────────────
 # Helper Functions
 # ──────────────────────────────────────────────
@@ -145,6 +171,15 @@ def call_groq(system_prompt: str, user_prompt: str) -> str:
         return chat_completion.choices[0].message.content
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"API error: {str(e)}")
+
+
+def get_current_user(request: Request) -> dict | None:
+    """Extract user from Authorization header. Returns None if not authenticated."""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        return validate_token(token)
+    return None
 
 
 # ──────────────────────────────────────────────
@@ -438,6 +473,66 @@ IMPORTANT: Use proper markdown formatting."""
     })
 
 
+@app.post("/api/convert")
+async def convert_code(request: CodeConvertRequest):
+    if not request.code.strip():
+        raise HTTPException(status_code=400, detail="Code cannot be empty")
+
+    system_prompt = f"""You are an expert polyglot programmer who converts code between programming languages.
+
+CRITICAL: The user has explicitly specified that the source code is written in {request.language}. You MUST treat it as {request.language} code regardless of what it looks like. Do NOT try to auto-detect the language.
+
+Convert the given {request.language} code to {request.target_language}. Follow these rules:
+1. Treat the input as {request.language} code — this is non-negotiable.
+2. Preserve the original logic and functionality exactly.
+3. Use idiomatic patterns and conventions of the target language ({request.target_language}).
+4. Adapt naming conventions (e.g. snake_case for Python, camelCase for JavaScript/Java).
+5. Use the target language's standard library and built-in features where possible.
+6. Add appropriate type annotations if the target language supports/requires them.
+7. Maintain the same level of error handling, adapting to the target language's patterns.
+
+Format your response EXACTLY like this:
+
+## 🔄 Converted Code ({request.language} → {request.target_language})
+
+```{request.target_language}
+(the complete converted code here)
+```
+
+## 📝 Conversion Notes
+List each significant change as a bullet point:
+- **Change title**: explanation of what changed and why
+
+## ⚠️ Important Differences
+List any behavioral differences between the two language implementations:
+- Differences in standard library, data types, error handling, etc.
+
+## 💡 Tips for {request.target_language}
+Brief tips about the target language conventions used in the converted code.
+
+IMPORTANT: Put the complete converted code in a SINGLE fenced code block with the correct language tag."""
+
+    user_prompt = f"""The following code is written in {request.language}. Convert it to {request.target_language}.
+
+Source language: {request.language}
+Target language: {request.target_language}
+
+```{request.language}
+{request.code}
+```"""
+
+    convert_text = call_groq(system_prompt, user_prompt)
+    code_match = re.search(r"```(?:\w+)?\n(.*?)```", convert_text, re.DOTALL)
+    converted_code = code_match.group(1).strip() if code_match else ""
+
+    return JSONResponse(content={
+        "convert": convert_text,
+        "converted_code": converted_code,
+        "source_language": request.language,
+        "target_language": request.target_language
+    })
+
+
 # ──────────────────────────────────────────────
 # NEW ENDPOINTS
 # ──────────────────────────────────────────────
@@ -715,6 +810,102 @@ RESPOND WITH ONLY THE JSON OBJECT, no markdown, no code fences."""
         }
 
     return JSONResponse(content=ds_data)
+
+
+# ──────────────────────────────────────────────
+# Auth Endpoints
+# ──────────────────────────────────────────────
+
+@app.post("/api/auth/register")
+async def register(request: RegisterRequest):
+    if not request.name.strip():
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not request.email.strip() or "@" not in request.email:
+        raise HTTPException(status_code=400, detail="Valid email is required")
+    if len(request.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    user = create_user(request.name.strip(), request.email.strip(), request.password)
+    if not user:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    token = create_session(user["id"])
+    return JSONResponse(content={"user": user, "token": token})
+
+
+@app.post("/api/auth/login")
+async def login(request: LoginRequest):
+    if not request.email.strip() or not request.password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+
+    user = authenticate_user(request.email.strip(), request.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = create_session(user["id"])
+    return JSONResponse(content={"user": user, "token": token})
+
+
+@app.get("/api/auth/me")
+async def get_me(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return JSONResponse(content={"user": user})
+
+
+@app.post("/api/auth/logout")
+async def logout(request: Request):
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        delete_session(auth_header[7:])
+    return JSONResponse(content={"ok": True})
+
+
+# ──────────────────────────────────────────────
+# History Endpoints
+# ──────────────────────────────────────────────
+
+@app.post("/api/history/save")
+async def save_history_endpoint(req: HistorySaveRequest, request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required to save history")
+
+    entry_id = save_history(user["id"], req.action, req.language, req.code, req.result_preview)
+    return JSONResponse(content={"id": entry_id, "ok": True})
+
+
+@app.get("/api/history")
+async def get_history(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+
+    history = get_user_history(user["id"])
+    return JSONResponse(content={"history": history})
+
+
+@app.delete("/api/history/{item_id}")
+async def delete_history(item_id: int, request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+
+    deleted = delete_history_item(user["id"], item_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="History item not found")
+    return JSONResponse(content={"ok": True})
+
+
+@app.delete("/api/history")
+async def clear_history(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+
+    clear_user_history(user["id"])
+    return JSONResponse(content={"ok": True})
 
 
 # ──────────────────────────────────────────────

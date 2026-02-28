@@ -3,7 +3,9 @@ import {
   Search, Wand2, Eye, GraduationCap, FlaskConical, Bug, History,
   GitCompareArrows, MessageSquare, Sun, Moon, Trash2, Copy, Download,
   ChevronDown, ChevronRight, Send, X, BarChart3, Code2, BrainCircuit,
-  Activity, Shield, Zap, FileCode, Boxes
+  Activity, Shield, Zap, FileCode, Boxes, LogOut, User, ArrowRight,
+  Sparkles, Lock, Mail, ChevronUp, Cpu, GitBranch, Terminal, Layers,
+  ArrowLeftRight
 } from 'lucide-react';
 import * as api from './utils/api';
 import {
@@ -45,6 +47,7 @@ const NAV_ITEMS = [
   },
   {
     section: 'Utilities', items: [
+      { id: 'convert-page', label: 'Convert Code', icon: ArrowLeftRight },
       { id: 'compare', label: 'Compare View', icon: GitCompareArrows },
       { id: 'history', label: 'Session History', icon: History },
     ]
@@ -57,6 +60,10 @@ const LANGUAGES = [
 ];
 
 function App() {
+  // Auth State
+  const [user, setUser] = useState(() => api.getSavedUser());
+  const [authModal, setAuthModal] = useState(null); // 'login' | 'register' | null
+
   // State
   const [code, setCode] = useState('');
   const [language, setLanguage] = useState('python');
@@ -76,6 +83,11 @@ function App() {
   const [debugData, setDebugData] = useState(null);
   const [metricsData, setMetricsData] = useState(null);
   const [dsVizData, setDsVizData] = useState(null);
+  const [convertData, setConvertData] = useState(null);
+  const [targetLanguage, setTargetLanguage] = useState('javascript');
+  const [currentView, setCurrentView] = useState('main'); // 'main' | 'convert-page'
+  const [convertSourceCode, setConvertSourceCode] = useState('');
+  const [convertSourceLang, setConvertSourceLang] = useState('c');
 
   // Debug mode
   const [errorMessage, setErrorMessage] = useState('');
@@ -91,6 +103,13 @@ function App() {
     try { return JSON.parse(localStorage.getItem('codeReviewHistory') || '[]'); }
     catch { return []; }
   });
+
+  // Load DB history on login
+  useEffect(() => {
+    if (user) {
+      api.getHistory().then(h => setSessionHistory(h)).catch(() => { });
+    }
+  }, [user]);
 
   // Metrics
   const [localMetrics, setLocalMetrics] = useState({ lines: 0, functions: 0 });
@@ -144,10 +163,12 @@ function App() {
     }
   }, [reviewData, rewriteData, testsData, explainData, debugData, activeTab]);
 
-  // Save history to localStorage
+  // Save history to localStorage (fallback for non-auth)
   useEffect(() => {
-    localStorage.setItem('codeReviewHistory', JSON.stringify(sessionHistory.slice(0, 50)));
-  }, [sessionHistory]);
+    if (!user) {
+      localStorage.setItem('codeReviewHistory', JSON.stringify(sessionHistory.slice(0, 50)));
+    }
+  }, [sessionHistory, user]);
 
   // Toggle focus area
   const toggleFocus = (area) => {
@@ -261,6 +282,18 @@ function App() {
     finally { setLoading(null); }
   };
 
+  const handleConvert = async (srcCode, srcLang, tgtLang) => {
+    if (!srcCode.trim()) { showToast('⚠️ Please paste some code first'); return; }
+    if (srcLang === tgtLang) { showToast('⚠️ Source and target languages must be different'); return; }
+    setLoading({ title: '🔄 Converting Code...', sub: `Converting ${srcLang} → ${tgtLang}` });
+    try {
+      const data = await api.convertCode(srcCode, srcLang, tgtLang);
+      setConvertData(data);
+      showToast(`✅ Code converted to ${tgtLang}`);
+    } catch (err) { showToast(`❌ ${err.message}`); }
+    finally { setLoading(null); }
+  };
+
   // Chat
   const handleChat = async () => {
     if (!chatInput.trim()) return;
@@ -286,8 +319,13 @@ function App() {
       language: lang,
       code: codeStr.substring(0, 500),
       timestamp: new Date().toLocaleString(),
+      created_at: new Date().toISOString(),
     };
     setSessionHistory((prev) => [entry, ...prev]);
+    // Save to DB if logged in
+    if (user) {
+      api.saveHistoryItem(action, lang, codeStr.substring(0, 5000)).catch(() => { });
+    }
   };
 
   const restoreFromHistory = (entry) => {
@@ -299,7 +337,24 @@ function App() {
   const clearHistory = () => {
     setSessionHistory([]);
     localStorage.removeItem('codeReviewHistory');
+    if (user) api.clearHistoryAPI().catch(() => { });
     showToast('🗑️ History cleared');
+  };
+
+  // Auth handlers
+  const handleLogout = async () => {
+    await api.logoutUser();
+    setUser(null);
+    setSessionHistory([]);
+    showToast('👋 Logged out');
+  };
+
+  const handleAuthSuccess = (userData) => {
+    setUser(userData.user);
+    setAuthModal(null);
+    showToast(`✅ Welcome, ${userData.user.name}!`);
+    // Fetch DB history
+    api.getHistory().then(h => setSessionHistory(h)).catch(() => { });
   };
 
   // Render helpers
@@ -308,8 +363,15 @@ function App() {
   const renderNavItem = (item) => (
     <button
       key={item.id}
-      className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
-      onClick={() => setActiveTab(item.id)}
+      className={`nav-item ${currentView === 'main' && activeTab === item.id ? 'active' : ''} ${item.id === 'convert-page' && currentView === 'convert-page' ? 'active' : ''}`}
+      onClick={() => {
+        if (item.id === 'convert-page') {
+          setCurrentView('convert-page');
+        } else {
+          setCurrentView('main');
+          setActiveTab(item.id);
+        }
+      }}
     >
       <item.icon />
       {item.label}
@@ -318,498 +380,546 @@ function App() {
 
   return (
     <>
-      {/* Animated Background */}
-      <div className="animated-bg">
-        <div className="bg-orb bg-orb-1"></div>
-        <div className="bg-orb bg-orb-2"></div>
-        <div className="bg-orb bg-orb-3"></div>
-        <div className="grid-overlay"></div>
-      </div>
+      {/* Auth Modal */}
+      {authModal && (
+        <AuthModal
+          mode={authModal}
+          onClose={() => setAuthModal(null)}
+          onSwitch={() => setAuthModal(authModal === 'login' ? 'register' : 'login')}
+          onSuccess={handleAuthSuccess}
+        />
+      )}
 
-      <div className="app-layout">
-        {/* ── Sidebar ── */}
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <div className="sidebar-logo">
-              <div className="logo-icon">
-                <BrainCircuit size={20} />
-              </div>
-              <div className="logo-text">
-                <h1>Code Review Sage</h1>
-                <p>AI-Powered Code Intelligence</p>
+      {/* Landing Page */}
+      {!user && !authModal && (
+        <LandingPage
+          theme={theme}
+          onLogin={() => setAuthModal('login')}
+          onRegister={() => setAuthModal('register')}
+          onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+        />
+      )}
+
+      {/* Main App — only shown when logged in */}
+      {user && (<>
+        {/* Animated Background */}
+        <div className="animated-bg">
+          <div className="bg-orb bg-orb-1"></div>
+          <div className="bg-orb bg-orb-2"></div>
+          <div className="bg-orb bg-orb-3"></div>
+          <div className="grid-overlay"></div>
+        </div>
+
+        <div className="app-layout">
+          {/* ── Sidebar ── */}
+          <aside className="sidebar">
+            <div className="sidebar-header">
+              <div className="sidebar-logo">
+                <div className="logo-icon">
+                  <BrainCircuit size={20} />
+                </div>
+                <div className="logo-text">
+                  <h1>Code Review Sage</h1>
+                  <p>AI-Powered Code Intelligence</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <nav className="sidebar-nav">
-            {NAV_ITEMS.map((section) => (
-              <div key={section.section}>
-                <div className="nav-section-label">{section.section}</div>
-                {section.items.map(renderNavItem)}
-              </div>
-            ))}
-          </nav>
+            <nav className="sidebar-nav">
+              {NAV_ITEMS.map((section) => (
+                <div key={section.section}>
+                  <div className="nav-section-label">{section.section}</div>
+                  {section.items.map(renderNavItem)}
+                </div>
+              ))}
+            </nav>
 
-          <div className="sidebar-footer">
-            <button className="theme-toggle" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-            <span className="online-badge">
-              <span className="online-dot"></span>
-              Online
-            </span>
-          </div>
-        </aside>
-
-        {/* ── Main Content ── */}
-        <div className="main-content">
-          <header className="main-header">
-            <div>
-              <h2>Code Review Sage</h2>
-              <p>AI-Powered Code Intelligence Platform</p>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <button className="toolbar-btn" onClick={() => setChatOpen(!chatOpen)}>
-                <MessageSquare size={14} /> AI Chat
+            <div className="sidebar-footer">
+              <button className="theme-toggle" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
+                {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
               </button>
-            </div>
-          </header>
-
-          <div className="main-body">
-            <div className="panels-container">
-              {/* ── Left Panel ── */}
-              <div className="left-panel">
-                {/* Language Bar */}
-                <div className="language-bar">
-                  <Code2 size={14} style={{ color: 'var(--text-muted)' }} />
-                  <select className="lang-select" value={language} onChange={(e) => setLanguage(e.target.value)}>
-                    {LANGUAGES.map((l) => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
-                  </select>
-                  <div className="focus-chips">
-                    {['bugs', 'performance', 'security', 'best practices'].map((area) => (
-                      <label key={area} className="focus-chip">
-                        <input type="checkbox" checked={focusAreas.includes(area)} onChange={() => toggleFocus(area)} />
-                        <span>{area.charAt(0).toUpperCase() + area.slice(1)}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Code Editor */}
-                <div className="code-editor">
-                  <div className="editor-toolbar">
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <div className="window-dots">
-                        <span className="dot-red"></span>
-                        <span className="dot-yellow"></span>
-                        <span className="dot-green"></span>
-                      </div>
-                      <span className="editor-label">Source Code</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.25rem' }}>
-                      <button className="toolbar-btn" onClick={() => {
-                        setCode(SAMPLE_CODES[language] || SAMPLE_CODES.python);
-                        showToast(`🧪 Loaded ${language} sample`);
-                      }}>
-                        <FlaskConical size={12} /> Sample
-                      </button>
-                      <button className="toolbar-btn" onClick={() => { setCode(''); }}>
-                        <Trash2 size={12} /> Clear
-                      </button>
-                    </div>
-                  </div>
-                  <div className="code-editor-wrapper">
-                    <div className="editor-line-numbers" id="editor-line-nums">
-                      {(code || '\n').split('\n').map((_, i) => (
-                        <div key={i} className="editor-line-num">{i + 1}</div>
-                      ))}
-                    </div>
-                    <textarea
-                      className="code-textarea"
-                      value={code}
-                      onChange={(e) => setCode(e.target.value)}
-                      placeholder={'// Paste your code here...\n// Select a language above\n// Click an action below\n\ndef example():\n    pass'}
-                      spellCheck={false}
-                      onScroll={(e) => {
-                        const lineNums = document.getElementById('editor-line-nums');
-                        if (lineNums) lineNums.scrollTop = e.target.scrollTop;
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Tab') {
-                          e.preventDefault();
-                          const start = e.target.selectionStart;
-                          const end = e.target.selectionEnd;
-                          setCode(code.substring(0, start) + '    ' + code.substring(end));
-                          setTimeout(() => { e.target.selectionStart = e.target.selectionEnd = start + 4; }, 0);
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Metrics Panel */}
-                <div className="metrics-panel">
-                  <div className="metrics-title"><BarChart3 size={12} /> Code Stats</div>
-                  <div className="metrics-grid">
-                    <div className="metric-card">
-                      <div className="metric-label">Lines</div>
-                      <div className="metric-value">{localMetrics.lines}</div>
-                    </div>
-                    <div className="metric-card">
-                      <div className="metric-label">Functions</div>
-                      <div className="metric-value">{localMetrics.functions}</div>
-                    </div>
-                    <div className="metric-card">
-                      <div className="metric-label">Complexity</div>
-                      <div className="metric-value">{metricsData?.complexity || '—'}</div>
-                    </div>
-                    <div className="metric-card">
-                      <div className="metric-label">Risk Score</div>
-                      <div className="metric-value">{metricsData?.risk_score ? `${metricsData.risk_score}/10` : '—'}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Debug Error Input — always show so user can enter error */}
-                <div style={{
-                  padding: '0.75rem 1rem',
-                  borderTop: '1px solid var(--border)',
-                  background: activeTab === 'debug' ? 'rgba(239,68,68,0.03)' : 'var(--bg-card)',
-                  display: 'flex', gap: '0.5rem', alignItems: 'center',
-                }}>
-                  <Bug size={14} style={{ color: 'var(--accent-red)', flexShrink: 0 }} />
-                  <textarea
-                    className="error-input"
-                    value={errorMessage}
-                    onChange={(e) => setErrorMessage(e.target.value)}
-                    placeholder="Paste error message / traceback here for Debug mode..."
-                    style={{ minHeight: '50px' }}
-                  />
-                </div>
-
-                {/* Action Buttons */}
-                <div className="action-buttons" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.35rem' }}>
-                  <button className="action-btn btn-review" onClick={handleReview} disabled={isLoading}>
-                    <Search size={14} /> Review
-                  </button>
-                  <button className="action-btn btn-rewrite" onClick={handleRewrite} disabled={isLoading}>
-                    <Wand2 size={14} /> Rewrite
-                  </button>
-                  <button className="action-btn btn-visualize" onClick={handleVisualize} disabled={isLoading}>
-                    <Eye size={14} /> Visualize
-                  </button>
-                  <button className="action-btn btn-explain" onClick={handleExplain} disabled={isLoading}>
-                    <GraduationCap size={14} /> Explain
-                  </button>
-                  <button className="action-btn btn-tests" onClick={handleGenerateTests} disabled={isLoading}>
-                    <FlaskConical size={14} /> Tests
-                  </button>
-                  <button className="action-btn btn-debug" onClick={handleDebug} disabled={isLoading}>
-                    <Bug size={14} /> Debug
-                  </button>
-                  <button className="action-btn btn-visualize" onClick={handleDSVisualize} disabled={isLoading} style={{ gridColumn: 'span 2' }}>
-                    <Boxes size={14} /> DS Viz
-                  </button>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span className="online-badge">
+                  <User size={10} />
+                  {user.name}
+                </span>
+                <button className="toolbar-btn" onClick={handleLogout} title="Logout" style={{ color: 'var(--accent-red)' }}>
+                  <LogOut size={14} />
+                </button>
               </div>
+            </div>
+          </aside>
 
-              {/* ── Right Panel ── */}
-              <div className="right-panel">
-                {/* Tab Bar */}
-                <div className="output-tabs">
-                  {TABS.map((tab) => (
-                    <button
-                      key={tab.id}
-                      className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-                      onClick={() => setActiveTab(tab.id)}
-                    >
-                      <tab.icon size={13} /> {tab.label}
-                    </button>
-                  ))}
-                  <button
-                    className={`tab-btn ${activeTab === 'ds-viz' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('ds-viz')}
-                  >
-                    <Boxes size={13} /> DS Viz
-                  </button>
-                  <div className="tab-actions" style={{ display: 'flex', gap: '0.35rem', paddingRight: '0.75rem' }}>
-                    <button className="toolbar-btn" style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', color: '#818cf8', fontWeight: 600, padding: '0.3rem 0.7rem' }} onClick={() => {
-                      let text = '';
-                      if (activeTab === 'review' && reviewData) text = reviewData.review;
-                      else if (activeTab === 'rewrite' && rewriteData) text = rewriteData.rewritten_code || rewriteData.rewrite;
-                      else if (activeTab === 'tests' && testsData) text = testsData.tests;
-                      else if (activeTab === 'explain' && explainData) text = explainData.explanation;
-                      else if (activeTab === 'debug' && debugData) text = debugData.debug;
-                      else if (activeTab === 'visualize' && visualizeData) text = JSON.stringify(visualizeData, null, 2);
-                      if (text) { copyToClipboard(text).then(() => showToast('📋 Copied to clipboard!')); }
-                      else { showToast('⚠️ Nothing to copy yet'); }
-                    }}>
-                      <Copy size={13} /> Copy All
-                    </button>
-                    {activeTab === 'rewrite' && rewriteData?.rewritten_code && (
-                      <button className="toolbar-btn" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', color: '#34d399', fontWeight: 600, padding: '0.3rem 0.7rem' }} onClick={() => {
-                        downloadFile(rewriteData.rewritten_code, `rewritten.${getFileExtension(language)}`);
-                        showToast('📥 Downloaded!');
-                      }}>
-                        <Download size={13} /> Download
-                      </button>
-                    )}
-                    {activeTab === 'tests' && testsData?.tests && (
-                      <button className="toolbar-btn" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', color: '#34d399', fontWeight: 600, padding: '0.3rem 0.7rem' }} onClick={() => {
-                        const ext = getFileExtension(language);
-                        downloadFile(testsData.tests, `tests.${ext}`);
-                        showToast('📥 Tests downloaded!');
-                      }}>
-                        <Download size={13} /> Download
-                      </button>
-                    )}
-                  </div>
+          {/* ── Main Content (analysis panels) ── */}
+          {currentView === 'main' && (
+            <div className="main-content">
+              <header className="main-header">
+                <div>
+                  <h2>Code Review Sage</h2>
+                  <p>AI-Powered Code Intelligence Platform</p>
                 </div>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <button className="toolbar-btn" onClick={() => setChatOpen(!chatOpen)}>
+                    <MessageSquare size={14} /> AI Chat
+                  </button>
+                </div>
+              </header>
 
-                {/* Output Content */}
-                <div className="output-content" ref={outputRef}>
-                  {/* Review */}
-                  {activeTab === 'review' && (
-                    reviewData ? (
-                      <div>
-                        <ScoreCard score={reviewData.quality_score} counts={reviewData.severity_counts} />
-                        <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(reviewData.review) }} />
+              <div className="main-body">
+                <div className="panels-container">
+                  {/* ── Left Panel ── */}
+                  <div className="left-panel">
+                    {/* Language Bar */}
+                    <div className="language-bar">
+                      <Code2 size={14} style={{ color: 'var(--text-muted)' }} />
+                      <select className="lang-select" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                        {LANGUAGES.map((l) => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+                      </select>
+                      <div className="focus-chips">
+                        {['bugs', 'performance', 'security', 'best practices'].map((area) => (
+                          <label key={area} className="focus-chip">
+                            <input type="checkbox" checked={focusAreas.includes(area)} onChange={() => toggleFocus(area)} />
+                            <span>{area.charAt(0).toUpperCase() + area.slice(1)}</span>
+                          </label>
+                        ))}
                       </div>
-                    ) : <Placeholder icon={<Search size={48} />} title="Ready to Review" text="Paste code and click Review for AI analysis" />
-                  )}
+                    </div>
 
-                  {/* Rewrite */}
-                  {activeTab === 'rewrite' && (
-                    rewriteData ? (
-                      <div>
-                        {/* Rewrite Focus Options */}
-                        <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
-                          <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Optimization Focus</div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                            {['performance', 'security', 'readability', 'memory', 'scalability', 'error handling'].map((opt) => (
-                              <label key={opt} className="focus-chip">
-                                <input type="checkbox" checked={rewriteFocus.includes(opt)} onChange={() => setRewriteFocus(p => p.includes(opt) ? p.filter(x => x !== opt) : [...p, opt])} />
-                                <span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
-                              </label>
-                            ))}
+                    {/* Code Editor */}
+                    <div className="code-editor">
+                      <div className="editor-toolbar">
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <div className="window-dots">
+                            <span className="dot-red"></span>
+                            <span className="dot-yellow"></span>
+                            <span className="dot-green"></span>
                           </div>
-                          <button className="action-btn btn-rewrite" style={{ marginTop: '0.5rem', padding: '0.4rem 1rem', fontSize: '0.7rem' }} onClick={handleRewrite} disabled={!!loading}>
-                            <Wand2 size={12} /> Re-optimize with new focus
+                          <span className="editor-label">Source Code</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button className="toolbar-btn" onClick={() => {
+                            setCode(SAMPLE_CODES[language] || SAMPLE_CODES.python);
+                            showToast(`🧪 Loaded ${language} sample`);
+                          }}>
+                            <FlaskConical size={12} /> Sample
+                          </button>
+                          <button className="toolbar-btn" onClick={() => { setCode(''); }}>
+                            <Trash2 size={12} /> Clear
                           </button>
                         </div>
-
-                        {/* VS Code-style rewritten code */}
-                        {rewriteData.rewritten_code && (
-                          <div className="vscode-editor">
-                            <div className="vscode-titlebar">
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <div className="window-dots">
-                                  <span className="dot-red"></span>
-                                  <span className="dot-yellow"></span>
-                                  <span className="dot-green"></span>
-                                </div>
-                                <span className="vscode-filename">rewritten.{getFileExtension(language)}</span>
-                              </div>
-                              <div style={{ display: 'flex', gap: '0.3rem' }}>
-                                <button className="toolbar-btn" onClick={() => { copyToClipboard(rewriteData.rewritten_code).then(() => showToast('📋 Code copied!')); }}>
-                                  <Copy size={12} /> Copy
-                                </button>
-                                <button className="toolbar-btn" onClick={() => { downloadFile(rewriteData.rewritten_code, `rewritten.${getFileExtension(language)}`); showToast('📥 Downloaded!'); }}>
-                                  <Download size={12} /> Download
-                                </button>
-                              </div>
-                            </div>
-                            <div className="vscode-body">
-                              <div className="vscode-line-numbers">
-                                {rewriteData.rewritten_code.split('\n').map((_, i) => (
-                                  <div key={i} className="vscode-line-num">{i + 1}</div>
-                                ))}
-                              </div>
-                              <pre className="vscode-code"><code>{rewriteData.rewritten_code}</code></pre>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Changes explanation */}
-                        <div className="prose-output" style={{ marginTop: '1rem' }}
-                          dangerouslySetInnerHTML={{
-                            __html: renderMarkdownToHTML(
-                              rewriteData.rewrite.replace(/```[\s\S]*?```/g, '').trim() || 'Code has been rewritten.'
-                            )
-                          }} />
                       </div>
-                    ) : (
-                      <div>
-                        {/* Rewrite Focus Options shown before running too */}
-                        <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
-                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>🎯 Choose Optimization Focus</div>
-                          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>Select what aspects the AI should prioritize when rewriting your code:</p>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                            {['performance', 'security', 'readability', 'memory', 'scalability', 'error handling'].map((opt) => (
-                              <label key={opt} className="focus-chip">
-                                <input type="checkbox" checked={rewriteFocus.includes(opt)} onChange={() => setRewriteFocus(p => p.includes(opt) ? p.filter(x => x !== opt) : [...p, opt])} />
-                                <span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                        <Placeholder icon={<Wand2 size={48} />} title="Ready to Rewrite" text="Select optimizations above, paste code, and click Rewrite" />
-                      </div>
-                    )
-                  )}
-
-                  {/* Tests */}
-                  {activeTab === 'tests' && (
-                    testsData ? (
-                      <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(testsData.tests) }} />
-                    ) : <Placeholder icon={<FlaskConical size={48} />} title="Ready to Generate Tests" text="Click Tests to generate unit tests, edge cases & failure scenarios" />
-                  )}
-
-                  {/* Visualize */}
-                  {activeTab === 'visualize' && (
-                    visualizeData ? (
-                      <div>
-                        <D3Graph data={visualizeData.graph} theme={theme} />
-                        {visualizeData.graph?.summary && (
-                          <div className="prose-output" style={{ marginTop: '1rem' }}
-                            dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML('## 🔍 Code Flow Summary\n' + visualizeData.graph.summary.map(s => `- ${s}`).join('\n')) }}
-                          />
-                        )}
-                      </div>
-                    ) : <Placeholder icon={<Eye size={48} />} title="Ready to Visualize" text="Click Visualize for an interactive code flow graph" />
-                  )}
-
-                  {/* Explain */}
-                  {activeTab === 'explain' && (
-                    explainData ? (
-                      <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(explainData.explanation) }} />
-                    ) : <Placeholder icon={<GraduationCap size={48} />} title="Ready to Explain" text="Click Explain for a detailed code walkthrough" />
-                  )}
-
-                  {/* Debug */}
-                  {activeTab === 'debug' && (
-                    debugData ? (
-                      <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(debugData.debug) }} />
-                    ) : (
-                      <div>
-                        <div style={{ padding: '1rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: '1rem' }}>
-                          <h3 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem' }}>🐞 How Debug Mode Works</h3>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                            <p><strong>Step 1:</strong> Paste your code in the editor on the left</p>
-                            <p><strong>Step 2:</strong> Paste the error message/traceback in the error box below the editor</p>
-                            <p><strong>Step 3:</strong> Click the <strong>Debug</strong> button</p>
-                            <p style={{ marginTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
-                              The AI will analyze both your code and the error to explain what went wrong,
-                              identify the exact line causing the issue, and provide corrected code.
-                            </p>
-                          </div>
-                        </div>
-                        <Placeholder icon={<Bug size={48} />} title="Debug Mode" text="Paste code + error message, then click Debug" />
-                      </div>
-                    )
-                  )}
-
-                  {/* Compare */}
-                  {activeTab === 'compare' && (
-                    rewriteData ? (
-                      <CompareView original={rewriteData.original_code} rewritten={rewriteData.rewritten_code} />
-                    ) : <Placeholder icon={<GitCompareArrows size={48} />} title="Before & After Compare" text="Run Rewrite first, then switch to Compare to see the diff" />
-                  )}
-
-                  {/* History */}
-                  {activeTab === 'history' && (
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h3 style={{ fontSize: '0.9rem', fontWeight: 700 }}>Session History</h3>
-                        {sessionHistory.length > 0 && (
-                          <button className="toolbar-btn" onClick={clearHistory}><Trash2 size={12} /> Clear All</button>
-                        )}
-                      </div>
-                      {sessionHistory.length === 0 ? (
-                        <Placeholder icon={<History size={48} />} title="No History Yet" text="Your code reviews and rewrites will appear here" />
-                      ) : (
-                        <div className="history-list">
-                          {sessionHistory.map((entry) => (
-                            <div key={entry.id} className="history-item" onClick={() => restoreFromHistory(entry)}>
-                              <div className="history-title">{entry.action} — {entry.language}</div>
-                              <div className="history-meta">{entry.timestamp} • {entry.code.length} chars</div>
-                            </div>
+                      <div className="code-editor-wrapper">
+                        <div className="editor-line-numbers" id="editor-line-nums">
+                          {(code || '\n').split('\n').map((_, i) => (
+                            <div key={i} className="editor-line-num">{i + 1}</div>
                           ))}
                         </div>
+                        <textarea
+                          className="code-textarea"
+                          value={code}
+                          onChange={(e) => setCode(e.target.value)}
+                          placeholder={'// Paste your code here...\n// Select a language above\n// Click an action below\n\ndef example():\n    pass'}
+                          spellCheck={false}
+                          onScroll={(e) => {
+                            const lineNums = document.getElementById('editor-line-nums');
+                            if (lineNums) lineNums.scrollTop = e.target.scrollTop;
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Tab') {
+                              e.preventDefault();
+                              const start = e.target.selectionStart;
+                              const end = e.target.selectionEnd;
+                              setCode(code.substring(0, start) + '    ' + code.substring(end));
+                              setTimeout(() => { e.target.selectionStart = e.target.selectionEnd = start + 4; }, 0);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Metrics Panel */}
+                    <div className="metrics-panel">
+                      <div className="metrics-title"><BarChart3 size={12} /> Code Stats</div>
+                      <div className="metrics-grid">
+                        <div className="metric-card">
+                          <div className="metric-label">Lines</div>
+                          <div className="metric-value">{localMetrics.lines}</div>
+                        </div>
+                        <div className="metric-card">
+                          <div className="metric-label">Functions</div>
+                          <div className="metric-value">{localMetrics.functions}</div>
+                        </div>
+                        <div className="metric-card">
+                          <div className="metric-label">Complexity</div>
+                          <div className="metric-value">{metricsData?.complexity || '—'}</div>
+                        </div>
+                        <div className="metric-card">
+                          <div className="metric-label">Risk Score</div>
+                          <div className="metric-value">{metricsData?.risk_score ? `${metricsData.risk_score}/10` : '—'}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Debug Error Input — always show so user can enter error */}
+                    <div style={{
+                      padding: '0.75rem 1rem',
+                      borderTop: '1px solid var(--border)',
+                      background: activeTab === 'debug' ? 'rgba(239,68,68,0.03)' : 'var(--bg-card)',
+                      display: 'flex', gap: '0.5rem', alignItems: 'center',
+                    }}>
+                      <Bug size={14} style={{ color: 'var(--accent-red)', flexShrink: 0 }} />
+                      <textarea
+                        className="error-input"
+                        value={errorMessage}
+                        onChange={(e) => setErrorMessage(e.target.value)}
+                        placeholder="Paste error message / traceback here for Debug mode..."
+                        style={{ minHeight: '50px' }}
+                      />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="action-buttons" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.35rem' }}>
+                      <button className="action-btn btn-review" onClick={handleReview} disabled={isLoading}>
+                        <Search size={14} /> Review
+                      </button>
+                      <button className="action-btn btn-rewrite" onClick={handleRewrite} disabled={isLoading}>
+                        <Wand2 size={14} /> Rewrite
+                      </button>
+                      <button className="action-btn btn-visualize" onClick={handleVisualize} disabled={isLoading}>
+                        <Eye size={14} /> Visualize
+                      </button>
+                      <button className="action-btn btn-explain" onClick={handleExplain} disabled={isLoading}>
+                        <GraduationCap size={14} /> Explain
+                      </button>
+                      <button className="action-btn btn-tests" onClick={handleGenerateTests} disabled={isLoading}>
+                        <FlaskConical size={14} /> Tests
+                      </button>
+                      <button className="action-btn btn-debug" onClick={handleDebug} disabled={isLoading}>
+                        <Bug size={14} /> Debug
+                      </button>
+                      <button className="action-btn btn-visualize" onClick={handleDSVisualize} disabled={isLoading} style={{ gridColumn: 'span 2' }}>
+                        <Boxes size={14} /> DS Viz
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ── Right Panel ── */}
+                  <div className="right-panel">
+                    {/* Tab Bar */}
+                    <div className="output-tabs">
+                      {TABS.map((tab) => (
+                        <button
+                          key={tab.id}
+                          className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+                          onClick={() => setActiveTab(tab.id)}
+                        >
+                          <tab.icon size={13} /> {tab.label}
+                        </button>
+                      ))}
+                      <button
+                        className={`tab-btn ${activeTab === 'ds-viz' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('ds-viz')}
+                      >
+                        <Boxes size={13} /> DS Viz
+                      </button>
+                      <div className="tab-actions" style={{ display: 'flex', gap: '0.35rem', paddingRight: '0.75rem' }}>
+                        <button className="toolbar-btn" style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', color: '#818cf8', fontWeight: 600, padding: '0.3rem 0.7rem' }} onClick={() => {
+                          let text = '';
+                          if (activeTab === 'review' && reviewData) text = reviewData.review;
+                          else if (activeTab === 'rewrite' && rewriteData) text = rewriteData.rewritten_code || rewriteData.rewrite;
+                          else if (activeTab === 'tests' && testsData) text = testsData.tests;
+                          else if (activeTab === 'explain' && explainData) text = explainData.explanation;
+                          else if (activeTab === 'debug' && debugData) text = debugData.debug;
+                          else if (activeTab === 'visualize' && visualizeData) text = JSON.stringify(visualizeData, null, 2);
+                          if (text) { copyToClipboard(text).then(() => showToast('📋 Copied to clipboard!')); }
+                          else { showToast('⚠️ Nothing to copy yet'); }
+                        }}>
+                          <Copy size={13} /> Copy All
+                        </button>
+                        {activeTab === 'rewrite' && rewriteData?.rewritten_code && (
+                          <button className="toolbar-btn" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', color: '#34d399', fontWeight: 600, padding: '0.3rem 0.7rem' }} onClick={() => {
+                            downloadFile(rewriteData.rewritten_code, `rewritten.${getFileExtension(language)}`);
+                            showToast('📥 Downloaded!');
+                          }}>
+                            <Download size={13} /> Download
+                          </button>
+                        )}
+                        {activeTab === 'tests' && testsData?.tests && (
+                          <button className="toolbar-btn" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', color: '#34d399', fontWeight: 600, padding: '0.3rem 0.7rem' }} onClick={() => {
+                            const ext = getFileExtension(language);
+                            downloadFile(testsData.tests, `tests.${ext}`);
+                            showToast('📥 Tests downloaded!');
+                          }}>
+                            <Download size={13} /> Download
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Output Content */}
+                    <div className="output-content" ref={outputRef}>
+                      {/* Review */}
+                      {activeTab === 'review' && (
+                        reviewData ? (
+                          <div>
+                            <ScoreCard score={reviewData.quality_score} counts={reviewData.severity_counts} />
+                            <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(reviewData.review) }} />
+                          </div>
+                        ) : <Placeholder icon={<Search size={48} />} title="Ready to Review" text="Paste code and click Review for AI analysis" />
+                      )}
+
+                      {/* Rewrite */}
+                      {activeTab === 'rewrite' && (
+                        rewriteData ? (
+                          <div>
+                            {/* Rewrite Focus Options */}
+                            <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                              <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Optimization Focus</div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                                {['performance', 'security', 'readability', 'memory', 'scalability', 'error handling'].map((opt) => (
+                                  <label key={opt} className="focus-chip">
+                                    <input type="checkbox" checked={rewriteFocus.includes(opt)} onChange={() => setRewriteFocus(p => p.includes(opt) ? p.filter(x => x !== opt) : [...p, opt])} />
+                                    <span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                                  </label>
+                                ))}
+                              </div>
+                              <button className="action-btn btn-rewrite" style={{ marginTop: '0.5rem', padding: '0.4rem 1rem', fontSize: '0.7rem' }} onClick={handleRewrite} disabled={!!loading}>
+                                <Wand2 size={12} /> Re-optimize with new focus
+                              </button>
+                            </div>
+
+                            {/* VS Code-style rewritten code */}
+                            {rewriteData.rewritten_code && (
+                              <div className="vscode-editor">
+                                <div className="vscode-titlebar">
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <div className="window-dots">
+                                      <span className="dot-red"></span>
+                                      <span className="dot-yellow"></span>
+                                      <span className="dot-green"></span>
+                                    </div>
+                                    <span className="vscode-filename">rewritten.{getFileExtension(language)}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                    <button className="toolbar-btn" onClick={() => { copyToClipboard(rewriteData.rewritten_code).then(() => showToast('📋 Code copied!')); }}>
+                                      <Copy size={12} /> Copy
+                                    </button>
+                                    <button className="toolbar-btn" onClick={() => { downloadFile(rewriteData.rewritten_code, `rewritten.${getFileExtension(language)}`); showToast('📥 Downloaded!'); }}>
+                                      <Download size={12} /> Download
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="vscode-body">
+                                  <div className="vscode-line-numbers">
+                                    {rewriteData.rewritten_code.split('\n').map((_, i) => (
+                                      <div key={i} className="vscode-line-num">{i + 1}</div>
+                                    ))}
+                                  </div>
+                                  <pre className="vscode-code"><code>{rewriteData.rewritten_code}</code></pre>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Changes explanation */}
+                            <div className="prose-output" style={{ marginTop: '1rem' }}
+                              dangerouslySetInnerHTML={{
+                                __html: renderMarkdownToHTML(
+                                  rewriteData.rewrite.replace(/```[\s\S]*?```/g, '').trim() || 'Code has been rewritten.'
+                                )
+                              }} />
+                          </div>
+                        ) : (
+                          <div>
+                            {/* Rewrite Focus Options shown before running too */}
+                            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>🎯 Choose Optimization Focus</div>
+                              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>Select what aspects the AI should prioritize when rewriting your code:</p>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                {['performance', 'security', 'readability', 'memory', 'scalability', 'error handling'].map((opt) => (
+                                  <label key={opt} className="focus-chip">
+                                    <input type="checkbox" checked={rewriteFocus.includes(opt)} onChange={() => setRewriteFocus(p => p.includes(opt) ? p.filter(x => x !== opt) : [...p, opt])} />
+                                    <span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                            <Placeholder icon={<Wand2 size={48} />} title="Ready to Rewrite" text="Select optimizations above, paste code, and click Rewrite" />
+                          </div>
+                        )
+                      )}
+
+                      {/* Tests */}
+                      {activeTab === 'tests' && (
+                        testsData ? (
+                          <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(testsData.tests) }} />
+                        ) : <Placeholder icon={<FlaskConical size={48} />} title="Ready to Generate Tests" text="Click Tests to generate unit tests, edge cases & failure scenarios" />
+                      )}
+
+                      {/* Visualize */}
+                      {activeTab === 'visualize' && (
+                        visualizeData ? (
+                          <div>
+                            <D3Graph data={visualizeData.graph} theme={theme} />
+                            {visualizeData.graph?.summary && (
+                              <div className="prose-output" style={{ marginTop: '1rem' }}
+                                dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML('## 🔍 Code Flow Summary\n' + visualizeData.graph.summary.map(s => `- ${s}`).join('\n')) }}
+                              />
+                            )}
+                          </div>
+                        ) : <Placeholder icon={<Eye size={48} />} title="Ready to Visualize" text="Click Visualize for an interactive code flow graph" />
+                      )}
+
+                      {/* Explain */}
+                      {activeTab === 'explain' && (
+                        explainData ? (
+                          <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(explainData.explanation) }} />
+                        ) : <Placeholder icon={<GraduationCap size={48} />} title="Ready to Explain" text="Click Explain for a detailed code walkthrough" />
+                      )}
+
+                      {/* Debug */}
+                      {activeTab === 'debug' && (
+                        debugData ? (
+                          <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(debugData.debug) }} />
+                        ) : (
+                          <div>
+                            <div style={{ padding: '1rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: '1rem' }}>
+                              <h3 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem' }}>🐞 How Debug Mode Works</h3>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                                <p><strong>Step 1:</strong> Paste your code in the editor on the left</p>
+                                <p><strong>Step 2:</strong> Paste the error message/traceback in the error box below the editor</p>
+                                <p><strong>Step 3:</strong> Click the <strong>Debug</strong> button</p>
+                                <p style={{ marginTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                                  The AI will analyze both your code and the error to explain what went wrong,
+                                  identify the exact line causing the issue, and provide corrected code.
+                                </p>
+                              </div>
+                            </div>
+                            <Placeholder icon={<Bug size={48} />} title="Debug Mode" text="Paste code + error message, then click Debug" />
+                          </div>
+                        )
+                      )}
+
+                      {/* Compare */}
+                      {activeTab === 'compare' && (
+                        rewriteData ? (
+                          <CompareView original={rewriteData.original_code} rewritten={rewriteData.rewritten_code} />
+                        ) : <Placeholder icon={<GitCompareArrows size={48} />} title="Before & After Compare" text="Run Rewrite first, then switch to Compare to see the diff" />
+                      )}
+
+                      {/* History */}
+                      {activeTab === 'history' && (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h3 style={{ fontSize: '0.9rem', fontWeight: 700 }}>Session History</h3>
+                            {sessionHistory.length > 0 && (
+                              <button className="toolbar-btn" onClick={clearHistory}><Trash2 size={12} /> Clear All</button>
+                            )}
+                          </div>
+                          {sessionHistory.length === 0 ? (
+                            <Placeholder icon={<History size={48} />} title="No History Yet" text="Your code reviews and rewrites will appear here" />
+                          ) : (
+                            <div className="history-list">
+                              {sessionHistory.map((entry) => (
+                                <div key={entry.id} className="history-item" onClick={() => restoreFromHistory(entry)}>
+                                  <div className="history-title">{entry.action} — {entry.language}</div>
+                                  <div className="history-meta">{entry.created_at || entry.timestamp} • {entry.code?.length || 0} chars</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* DS Visualizer */}
+                      {activeTab === 'ds-viz' && (
+                        dsVizData ? (
+                          <DSVisualizer data={dsVizData} />
+                        ) : <Placeholder icon={<Boxes size={48} />} title="Data Structure Visualizer" text="Paste code with linked lists, trees or graphs, then click DS Viz" />
                       )}
                     </div>
-                  )}
-
-                  {/* DS Visualizer */}
-                  {activeTab === 'ds-viz' && (
-                    dsVizData ? (
-                      <DSVisualizer data={dsVizData} />
-                    ) : <Placeholder icon={<Boxes size={48} />} title="Data Structure Visualizer" text="Paste code with linked lists, trees or graphs, then click DS Viz" />
-                  )}
+                  </div>
                 </div>
+
+                {/* ── Chat Panel ── */}
+                {chatOpen && (
+                  <div className="chat-panel">
+                    <div className="chat-header">
+                      <h3><MessageSquare size={16} /> AI Chat</h3>
+                      <button className="toolbar-btn" onClick={() => setChatOpen(false)}><X size={14} /></button>
+                    </div>
+                    <div className="chat-messages">
+                      {chatMessages.length === 0 && (
+                        <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.78rem', padding: '2rem 1rem' }}>
+                          Ask questions about your code...<br />
+                          <span style={{ fontSize: '0.7rem' }}>"Why did you suggest this?" • "Optimize function X" • "Make this async"</span>
+                        </div>
+                      )}
+                      {chatMessages.map((msg, i) => (
+                        <div key={i} className={`chat-msg ${msg.role === 'user' ? 'user' : 'ai'}`}>
+                          {msg.role === 'ai' ? (
+                            <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(msg.content) }} />
+                          ) : msg.content}
+                        </div>
+                      ))}
+                      {chatLoading && (
+                        <div className="chat-msg ai" style={{ opacity: 0.5 }}>Thinking...</div>
+                      )}
+                    </div>
+                    <div className="chat-input-area">
+                      <input
+                        className="chat-input"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleChat(); }}
+                        placeholder="Ask about the code..."
+                      />
+                      <button className="chat-send-btn" onClick={handleChat} disabled={chatLoading || !chatInput.trim()}>
+                        <Send size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
+          )}
 
-            {/* ── Chat Panel ── */}
-            {chatOpen && (
-              <div className="chat-panel">
-                <div className="chat-header">
-                  <h3><MessageSquare size={16} /> AI Chat</h3>
-                  <button className="toolbar-btn" onClick={() => setChatOpen(false)}><X size={14} /></button>
-                </div>
-                <div className="chat-messages">
-                  {chatMessages.length === 0 && (
-                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.78rem', padding: '2rem 1rem' }}>
-                      Ask questions about your code...<br />
-                      <span style={{ fontSize: '0.7rem' }}>"Why did you suggest this?" • "Optimize function X" • "Make this async"</span>
-                    </div>
-                  )}
-                  {chatMessages.map((msg, i) => (
-                    <div key={i} className={`chat-msg ${msg.role === 'user' ? 'user' : 'ai'}`}>
-                      {msg.role === 'ai' ? (
-                        <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(msg.content) }} />
-                      ) : msg.content}
-                    </div>
-                  ))}
-                  {chatLoading && (
-                    <div className="chat-msg ai" style={{ opacity: 0.5 }}>Thinking...</div>
-                  )}
-                </div>
-                <div className="chat-input-area">
-                  <input
-                    className="chat-input"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleChat(); }}
-                    placeholder="Ask about the code..."
-                  />
-                  <button className="chat-send-btn" onClick={handleChat} disabled={chatLoading || !chatInput.trim()}>
-                    <Send size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* ── Convert Page ── */}
+          {currentView === 'convert-page' && (
+            <ConvertPage
+              theme={theme}
+              convertSourceCode={convertSourceCode}
+              setConvertSourceCode={setConvertSourceCode}
+              convertSourceLang={convertSourceLang}
+              setConvertSourceLang={setConvertSourceLang}
+              targetLanguage={targetLanguage}
+              setTargetLanguage={setTargetLanguage}
+              convertData={convertData}
+              onConvert={handleConvert}
+              loading={loading}
+              showToast={showToast}
+            />
+          )}
         </div>
-      </div>
 
-      {/* Chat toggle (when closed) */}
-      {!chatOpen && (
-        <button className="chat-toggle-btn" onClick={() => setChatOpen(true)}>
-          <MessageSquare size={20} />
-        </button>
-      )}
+        {/* Chat toggle (when closed) */}
+        {!chatOpen && (
+          <button className="chat-toggle-btn" onClick={() => setChatOpen(true)}>
+            <MessageSquare size={20} />
+          </button>
+        )}
 
-      {/* Loading */}
-      {loading && (
-        <div className="loading-overlay">
-          <div className="loading-card">
-            <div className="loading-spinner"></div>
-            <h3>{loading.title}</h3>
-            <p>{loading.sub}</p>
+        {/* Loading */}
+        {loading && (
+          <div className="loading-overlay">
+            <div className="loading-card">
+              <div className="loading-spinner"></div>
+              <h3>{loading.title}</h3>
+              <p>{loading.sub}</p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+      </>)}
 
       {/* Toast */}
       {toast && <div className="toast">{toast}</div>}
@@ -818,6 +928,163 @@ function App() {
 }
 
 /* ── Sub Components ── */
+
+function ConvertPage({ theme, convertSourceCode, setConvertSourceCode, convertSourceLang, setConvertSourceLang, targetLanguage, setTargetLanguage, convertData, onConvert, loading, showToast }) {
+  const outputRef = useRef(null);
+
+  useEffect(() => {
+    if (outputRef.current) {
+      highlightAllCode(outputRef.current);
+    }
+  }, [convertData]);
+
+  return (
+    <div className="main-content" style={{ flex: 1 }}>
+      <header className="main-header">
+        <div>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><ArrowLeftRight size={18} /> Code Converter</h2>
+          <p>Convert code between programming languages with AI</p>
+        </div>
+      </header>
+
+      <div className="main-body" style={{ overflow: 'hidden' }}>
+        <div className="convert-page-layout">
+          {/* Left: Input */}
+          <div className="convert-input-panel">
+            {/* Language Selectors */}
+            <div className="convert-lang-bar">
+              <div className="convert-lang-group">
+                <label className="convert-lang-label">Source Language</label>
+                <select className="lang-select" value={convertSourceLang} onChange={(e) => setConvertSourceLang(e.target.value)}>
+                  {LANGUAGES.map((l) => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+                </select>
+              </div>
+              <div className="convert-arrow">
+                <ArrowLeftRight size={20} />
+              </div>
+              <div className="convert-lang-group">
+                <label className="convert-lang-label">Target Language</label>
+                <select className="lang-select" value={targetLanguage} onChange={(e) => setTargetLanguage(e.target.value)}>
+                  {LANGUAGES.filter(l => l !== convertSourceLang).map((l) => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Code Input */}
+            <div className="code-editor" style={{ flex: 1 }}>
+              <div className="editor-toolbar">
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div className="window-dots">
+                    <span className="dot-red"></span>
+                    <span className="dot-yellow"></span>
+                    <span className="dot-green"></span>
+                  </div>
+                  <span className="editor-label">Source Code ({convertSourceLang})</span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.25rem' }}>
+                  <button className="toolbar-btn" onClick={() => { setConvertSourceCode(SAMPLE_CODES[convertSourceLang] || SAMPLE_CODES.python); showToast(`🧪 Loaded ${convertSourceLang} sample`); }}>
+                    <FlaskConical size={12} /> Sample
+                  </button>
+                  <button className="toolbar-btn" onClick={() => setConvertSourceCode('')}>
+                    <Trash2 size={12} /> Clear
+                  </button>
+                </div>
+              </div>
+              <div className="code-editor-wrapper">
+                <div className="editor-line-numbers">
+                  {(convertSourceCode || '\n').split('\n').map((_, i) => (
+                    <div key={i} className="editor-line-num">{i + 1}</div>
+                  ))}
+                </div>
+                <textarea
+                  className="code-textarea"
+                  value={convertSourceCode}
+                  onChange={(e) => setConvertSourceCode(e.target.value)}
+                  placeholder={`// Paste your ${convertSourceLang} code here...`}
+                  spellCheck={false}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab') {
+                      e.preventDefault();
+                      const start = e.target.selectionStart;
+                      const end = e.target.selectionEnd;
+                      setConvertSourceCode(convertSourceCode.substring(0, start) + '    ' + convertSourceCode.substring(end));
+                      setTimeout(() => { e.target.selectionStart = e.target.selectionEnd = start + 4; }, 0);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Convert Button */}
+            <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+              <button
+                className="action-btn btn-convert"
+                onClick={() => onConvert(convertSourceCode, convertSourceLang, targetLanguage)}
+                disabled={!!loading}
+                style={{ width: '100%', padding: '0.75rem', fontSize: '0.85rem' }}
+              >
+                <ArrowLeftRight size={16} /> Convert {convertSourceLang.toUpperCase()} → {targetLanguage.toUpperCase()}
+              </button>
+            </div>
+          </div>
+
+          {/* Right: Output */}
+          <div className="convert-output-panel" ref={outputRef}>
+            {convertData ? (
+              <div>
+                {/* VS Code-style converted code */}
+                {convertData.converted_code && (
+                  <div className="vscode-editor">
+                    <div className="vscode-titlebar">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div className="window-dots">
+                          <span className="dot-red"></span>
+                          <span className="dot-yellow"></span>
+                          <span className="dot-green"></span>
+                        </div>
+                        <span className="vscode-filename">converted.{getFileExtension(convertData.target_language)}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.3rem' }}>
+                        <button className="toolbar-btn" onClick={() => { copyToClipboard(convertData.converted_code).then(() => showToast('📋 Code copied!')); }}>
+                          <Copy size={12} /> Copy
+                        </button>
+                        <button className="toolbar-btn" onClick={() => { downloadFile(convertData.converted_code, `converted.${getFileExtension(convertData.target_language)}`); showToast('📥 Downloaded!'); }}>
+                          <Download size={12} /> Download
+                        </button>
+                      </div>
+                    </div>
+                    <div className="vscode-body">
+                      <div className="vscode-line-numbers">
+                        {convertData.converted_code.split('\n').map((_, i) => (
+                          <div key={i} className="vscode-line-num">{i + 1}</div>
+                        ))}
+                      </div>
+                      <pre className="vscode-code"><code>{convertData.converted_code}</code></pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Conversion notes */}
+                <div className="prose-output" style={{ marginTop: '1rem' }}
+                  dangerouslySetInnerHTML={{
+                    __html: renderMarkdownToHTML(
+                      convertData.convert.replace(/```[\s\S]*?```/g, '').trim() || 'Code has been converted.'
+                    )
+                  }} />
+              </div>
+            ) : (
+              <div className="placeholder-state">
+                <div className="placeholder-icon"><ArrowLeftRight size={48} /></div>
+                <h3>Converted Code Will Appear Here</h3>
+                <p>Select source & target languages, paste your code, and click Convert</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Placeholder({ icon, title, text }) {
   return (
@@ -1176,4 +1443,235 @@ function await_import_diff() {
   return { diffLines: null }; // simplified — comparison done via layout
 }
 
+/* ── Landing Page ── */
+function LandingPage({ theme, onLogin, onRegister, onToggleTheme }) {
+  const FEATURES = [
+    { icon: Search, title: 'AI Code Review', desc: 'Get detailed reviews with quality scoring, severity analysis, and actionable suggestions.', color: '#6366f1' },
+    { icon: Wand2, title: 'Smart Rewrite', desc: 'Optimize code for performance, security, readability with one click.', color: '#8b5cf6' },
+    { icon: FlaskConical, title: 'Test Generation', desc: 'Auto-generate unit tests, edge cases, and failure scenarios.', color: '#f59e0b' },
+    { icon: Eye, title: 'Code Visualization', desc: 'Interactive D3.js flow graphs that map your code architecture.', color: '#06b6d4' },
+    { icon: GraduationCap, title: 'Code Explanation', desc: 'Line-by-line breakdowns perfect for learning and onboarding.', color: '#10b981' },
+    { icon: Bug, title: 'Debug Mode', desc: 'Paste code + error message — get root cause analysis and fix.', color: '#ef4444' },
+    { icon: Boxes, title: 'DS Visualization', desc: 'Visualize linked lists, trees, graphs from your code.', color: '#ec4899' },
+    { icon: MessageSquare, title: 'AI Chat', desc: 'Chat with AI about your code — ask questions, get insights.', color: '#64748b' },
+  ];
+
+  const STATS = [
+    { value: '13+', label: 'Languages' },
+    { value: 'AI', label: 'Powered' },
+    { value: '8', label: 'Features' },
+    { value: '∞', label: 'Possibilities' },
+  ];
+
+  return (
+    <>
+      <div className="animated-bg">
+        <div className="bg-orb bg-orb-1"></div>
+        <div className="bg-orb bg-orb-2"></div>
+        <div className="bg-orb bg-orb-3"></div>
+        <div className="grid-overlay"></div>
+      </div>
+
+      <div className="landing-page">
+        {/* Navbar */}
+        <nav className="landing-nav">
+          <div className="landing-nav-brand">
+            <div className="logo-icon" style={{ width: 36, height: 36, borderRadius: 10, fontSize: '1rem' }}>
+              <BrainCircuit size={18} />
+            </div>
+            <span className="landing-nav-title">Code Review Sage</span>
+          </div>
+          <div className="landing-nav-actions">
+            <button className="theme-toggle" onClick={onToggleTheme}>
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button className="landing-btn-outline" onClick={onLogin}>Sign In</button>
+            <button className="landing-btn-primary" onClick={onRegister}>
+              Get Started <ArrowRight size={14} />
+            </button>
+          </div>
+        </nav>
+
+        {/* Hero */}
+        <section className="landing-hero">
+          <div className="hero-badge">
+            <Sparkles size={13} />
+            AI-Powered Code Intelligence
+          </div>
+          <h1 className="hero-title">
+            Review, Rewrite &<br />
+            <span className="hero-gradient">Optimize Your Code</span>
+          </h1>
+          <p className="hero-subtitle">
+            The all-in-one AI platform for code review, optimization, testing, visualization, debugging, and more.
+            Supports 13+ languages. Powered by advanced AI.
+          </p>
+          <div className="hero-cta">
+            <button className="landing-btn-primary hero-btn" onClick={onRegister}>
+              Start For Free <ArrowRight size={16} />
+            </button>
+            <button className="landing-btn-outline hero-btn" onClick={onLogin}>
+              Sign In
+            </button>
+          </div>
+
+          {/* Stats */}
+          <div className="hero-stats">
+            {STATS.map((s, i) => (
+              <div key={i} className="hero-stat">
+                <div className="hero-stat-value">{s.value}</div>
+                <div className="hero-stat-label">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Features */}
+        <section className="landing-features" id="features">
+          <div className="section-header">
+            <h2 className="section-title">Powerful Features</h2>
+            <p className="section-subtitle">Everything you need to write better code, faster.</p>
+          </div>
+          <div className="features-grid">
+            {FEATURES.map((f, i) => (
+              <div key={i} className="feature-card">
+                <div className="feature-icon" style={{ background: f.color + '18', color: f.color }}>
+                  <f.icon size={22} />
+                </div>
+                <h3 className="feature-title">{f.title}</h3>
+                <p className="feature-desc">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section className="landing-cta">
+          <div className="cta-card">
+            <h2>Ready to Level Up Your Code?</h2>
+            <p>Join developers who use AI-powered code intelligence to ship better software.</p>
+            <button className="landing-btn-primary hero-btn" onClick={onRegister}>
+              Create Free Account <ArrowRight size={16} />
+            </button>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="landing-footer">
+          <div className="landing-footer-content">
+            <div className="landing-footer-brand">
+              <BrainCircuit size={16} />
+              <span>Code Review Sage</span>
+            </div>
+            <p>Built with React, FastAPI & Groq AI</p>
+          </div>
+        </footer>
+      </div>
+    </>
+  );
+}
+
+/* ── Auth Modal ── */
+function AuthModal({ mode, onClose, onSwitch, onSuccess }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const isLogin = mode === 'login';
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (!email.trim() || !password) {
+      setError('Email and password are required');
+      return;
+    }
+    if (!isLogin && !name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = isLogin
+        ? await api.loginUser(email, password)
+        : await api.registerUser(name, email, password);
+      onSuccess(data);
+    } catch (err) {
+      setError(err.message || 'Something went wrong');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="auth-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="auth-modal">
+        <button className="auth-close" onClick={onClose}><X size={18} /></button>
+
+        <div className="auth-header">
+          <div className="logo-icon" style={{ width: 44, height: 44, borderRadius: 12 }}>
+            <BrainCircuit size={22} />
+          </div>
+          <h2>{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
+          <p>{isLogin ? 'Sign in to access your dashboard' : 'Get started with Code Review Sage'}</p>
+        </div>
+
+        <form className="auth-form" onSubmit={handleSubmit}>
+          {!isLogin && (
+            <div className="auth-field">
+              <label><User size={14} /> Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+                autoComplete="name"
+              />
+            </div>
+          )}
+          <div className="auth-field">
+            <label><Mail size={14} /> Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+            />
+          </div>
+          <div className="auth-field">
+            <label><Lock size={14} /> Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete={isLogin ? 'current-password' : 'new-password'}
+            />
+          </div>
+
+          {error && <div className="auth-error">{error}</div>}
+
+          <button type="submit" className="auth-submit" disabled={loading}>
+            {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')}
+          </button>
+        </form>
+
+        <div className="auth-switch">
+          {isLogin ? "Don't have an account?" : 'Already have an account?'}
+          <button onClick={onSwitch}>{isLogin ? 'Sign Up' : 'Sign In'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default App;
+
