@@ -25,11 +25,17 @@ from database import init_db, create_user, authenticate_user, create_session, va
 load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_KEY_FALLBACK = os.getenv("GROQ_API_KEY_FALLBACK")
+
 if not GROQ_API_KEY:
     print("⚠️  WARNING: GROQ_API_KEY not found. AI features will not work.")
     client = None
+    fallback_client = None
 else:
     client = Groq(api_key=GROQ_API_KEY)
+    fallback_client = Groq(api_key=GROQ_API_KEY_FALLBACK) if GROQ_API_KEY_FALLBACK else None
+    if fallback_client:
+        print("✅ Fallback API key configured")
 
 MODEL_NAME = "llama-3.3-70b-versatile"
 TEMPERATURE = 0.3
@@ -157,8 +163,9 @@ def parse_review_response(review_text: str) -> dict:
 def call_groq(system_prompt: str, user_prompt: str) -> str:
     if not client:
         raise HTTPException(status_code=503, detail="AI service not configured. Set GROQ_API_KEY environment variable.")
-    try:
-        chat_completion = client.chat.completions.create(
+
+    def _make_request(groq_client):
+        chat_completion = groq_client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -169,8 +176,19 @@ def call_groq(system_prompt: str, user_prompt: str) -> str:
             top_p=TOP_P,
         )
         return chat_completion.choices[0].message.content
+
+    try:
+        return _make_request(client)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"API error: {str(e)}")
+        error_str = str(e)
+        # If rate limited (429) and we have a fallback key, try that
+        if ("429" in error_str or "rate_limit" in error_str.lower()) and fallback_client:
+            print(f"⚠️ Primary key rate-limited, switching to fallback key...")
+            try:
+                return _make_request(fallback_client)
+            except Exception as e2:
+                raise HTTPException(status_code=500, detail=f"API error (both keys failed): {str(e2)}")
+        raise HTTPException(status_code=500, detail=f"API error: {error_str}")
 
 
 def get_current_user(request: Request) -> dict | None:
@@ -323,12 +341,17 @@ async def rewrite_code(request: CodeRewriteRequest):
     system_prompt = f"""You are an expert code optimizer and refactoring specialist.
 Rewrite the given code to be clean, optimized, secure, well-documented, and production-ready.
 
+CRITICAL LANGUAGE RULE: The code is written in {request.language}. You MUST rewrite it in {request.language}.
+Do NOT convert the code to a different programming language. Keep it in {request.language}.
+If the code is C, rewrite it in C. If the code is C++, rewrite it in C++. If the code is Python, rewrite it in Python.
+NEVER change the programming language of the code.
+
 Format your response EXACTLY like this:
 
 ## ✨ Rewritten Code
 
 ```{request.language}
-(the complete rewritten code here)
+(the complete rewritten code here — MUST be in {request.language})
 ```
 
 ## 📝 Changes Made
@@ -344,9 +367,10 @@ List security fixes as bullet points. If none needed, say "No security issues fo
 ## 📎 Additional Notes
 Any other recommendations.
 
-IMPORTANT: Put the complete rewritten code in a SINGLE fenced code block with the correct language tag."""
+IMPORTANT: Put the complete rewritten code in a SINGLE fenced code block with the correct language tag ({request.language}).
+The rewritten code MUST be in {request.language}. This is non-negotiable."""
 
-    user_prompt = f"""Rewrite and optimize the following {request.language} code to production quality.{extra_instructions}
+    user_prompt = f"""Rewrite and optimize the following {request.language} code to production quality. Keep it in {request.language} — do NOT convert to any other language.{extra_instructions}
 
 ```{request.language}
 {request.code}
@@ -739,17 +763,28 @@ WHEN ANSWERING:
 
     messages.append({"role": "user", "content": request.message})
 
-    try:
-        chat_completion = client.chat.completions.create(
+    def _chat_request(groq_client):
+        chat_completion = groq_client.chat.completions.create(
             messages=messages,
             model=MODEL_NAME,
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
             top_p=TOP_P,
         )
-        response = chat_completion.choices[0].message.content
+        return chat_completion.choices[0].message.content
+
+    try:
+        response = _chat_request(client)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"API error: {str(e)}")
+        error_str = str(e)
+        if ("429" in error_str or "rate_limit" in error_str.lower()) and fallback_client:
+            print(f"⚠️ Chat: Primary key rate-limited, switching to fallback...")
+            try:
+                response = _chat_request(fallback_client)
+            except Exception as e2:
+                raise HTTPException(status_code=500, detail=f"API error (both keys failed): {str(e2)}")
+        else:
+            raise HTTPException(status_code=500, detail=f"API error: {error_str}")
 
     return JSONResponse(content={"response": response})
 
