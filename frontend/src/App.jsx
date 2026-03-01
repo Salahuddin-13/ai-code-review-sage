@@ -5,7 +5,8 @@ import {
   ChevronDown, ChevronRight, Send, X, BarChart3, Code2, BrainCircuit,
   Activity, Shield, Zap, FileCode, Boxes, LogOut, User, ArrowRight,
   Sparkles, Lock, Mail, ChevronUp, Cpu, GitBranch, Terminal, Layers,
-  ArrowLeftRight, Dna, BookOpen, FolderOpen, Play
+  ArrowLeftRight, Dna, BookOpen, FolderOpen, Play, Menu, GripVertical,
+  PanelLeftClose
 } from 'lucide-react';
 import * as api from './utils/api';
 import {
@@ -58,6 +59,45 @@ const VSCODE_EDITOR_OPTIONS = {
     preview: true, insertMode: 'replace',
   },
 };
+
+// ── Custom hook for draggable panel resize ──
+function useResizable(initialPercent = 60, minPercent = 30, maxPercent = 80) {
+  const [percent, setPercent] = useState(initialPercent);
+  const isDragging = useRef(false);
+  const containerRef = useRef(null);
+
+  const onMouseDown = useCallback((e) => {
+    e.preventDefault();
+    isDragging.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (ev) => {
+      if (!isDragging.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = (ev.clientX || ev.touches?.[0]?.clientX) - rect.left;
+      const pct = Math.min(maxPercent, Math.max(minPercent, (x / rect.width) * 100));
+      setPercent(pct);
+    };
+
+    const onMouseUp = () => {
+      isDragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('touchmove', onMouseMove);
+      window.removeEventListener('touchend', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('touchmove', onMouseMove);
+    window.addEventListener('touchend', onMouseUp);
+  }, [minPercent, maxPercent]);
+
+  return { percent, containerRef, onMouseDown };
+}
 
 const TABS = [
   { id: 'review', label: 'Review', icon: Search },
@@ -140,6 +180,12 @@ function App() {
 
   // Debug mode
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Sidebar toggle (mobile)
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Resizable panels
+  const mainResize = useResizable(60, 30, 80);
 
   // Chat
   const [chatOpen, setChatOpen] = useState(false);
@@ -436,6 +482,7 @@ function App() {
           setCurrentView('main');
           setActiveTab(item.id);
         }
+        setSidebarOpen(false);
       }}
     >
       <item.icon />
@@ -476,8 +523,11 @@ function App() {
         </div>
 
         <div className="app-layout">
+          {/* ── Mobile sidebar overlay ── */}
+          {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+
           {/* ── Sidebar ── */}
-          <aside className="sidebar">
+          <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
             <div className="sidebar-header">
               <div className="sidebar-logo">
                 <div className="logo-icon">
@@ -488,6 +538,9 @@ function App() {
                   <p>AI-Powered Code Intelligence</p>
                 </div>
               </div>
+              <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>
+                <PanelLeftClose size={18} />
+              </button>
             </div>
 
             <nav className="sidebar-nav">
@@ -519,9 +572,14 @@ function App() {
           {currentView === 'main' && (
             <div className="main-content">
               <header className="main-header">
-                <div>
-                  <h2>Code Review Sage</h2>
-                  <p>AI-Powered Code Intelligence Platform</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                    <Menu size={20} />
+                  </button>
+                  <div>
+                    <h2>Code Review Sage</h2>
+                    <p>AI-Powered Code Intelligence Platform</p>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   <button className="toolbar-btn" onClick={() => setChatOpen(!chatOpen)}>
@@ -531,9 +589,9 @@ function App() {
               </header>
 
               <div className="main-body">
-                <div className="panels-container">
+                <div className="panels-container" ref={mainResize.containerRef}>
                   {/* ── Left Panel ── */}
-                  <div className="left-panel">
+                  <div className="left-panel" style={{ width: `${mainResize.percent}%` }}>
                     {/* Language Bar */}
                     <div className="language-bar">
                       <Code2 size={14} style={{ color: 'var(--text-muted)' }} />
@@ -622,8 +680,13 @@ function App() {
                     </div>
                   </div>
 
+                  {/* ── Resize Divider ── */}
+                  <div className="resize-divider" onMouseDown={mainResize.onMouseDown} onTouchStart={mainResize.onMouseDown}>
+                    <div className="resize-handle"><GripVertical size={12} /></div>
+                  </div>
+
                   {/* ── Right Panel ── */}
-                  <div className="right-panel">
+                  <div className="right-panel" style={{ width: `${100 - mainResize.percent}%` }}>
                     {/* Tab Bar */}
                     <div className="output-tabs">
                       {TABS.map((tab) => (
@@ -1019,9 +1082,12 @@ function ConvertPage({ theme, convertSourceCode, setConvertSourceCode, convertSo
   return (
     <div className="main-content" style={{ flex: 1 }}>
       <header className="main-header">
-        <div>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><ArrowLeftRight size={18} /> Code Converter</h2>
-          <p>Convert code between programming languages with AI</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
+          <div>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><ArrowLeftRight size={18} /> Code Converter</h2>
+            <p>Convert code between programming languages with AI</p>
+          </div>
         </div>
       </header>
 
@@ -1164,9 +1230,12 @@ function ToolPage({ title, subtitle, icon, btnLabel, btnClass, onAction, actionH
   return (
     <div className="main-content" style={{ flex: 1 }}>
       <header className="main-header">
-        <div>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>{icon} {title}</h2>
-          <p>{subtitle}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
+          <div>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>{icon} {title}</h2>
+            <p>{subtitle}</p>
+          </div>
         </div>
       </header>
 
@@ -1912,9 +1981,12 @@ function PracticePage({ theme, language, setLanguage, loading, showToast }) {
   return (
     <div className="main-content" style={{ flex: 1 }}>
       <header className="main-header">
-        <div>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><BookOpen size={18} /> Practice Mode</h2>
-          <p>AI-generated DSA problems — solve, learn, master</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
+          <div>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><BookOpen size={18} /> Practice Mode</h2>
+            <p>AI-generated DSA problems — solve, learn, master</p>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           {/* Timer */}
@@ -2237,9 +2309,12 @@ function SnippetsPage({ theme, showToast, code, language }) {
   return (
     <div className="main-content" style={{ flex: 1 }}>
       <header className="main-header">
-        <div>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><FolderOpen size={18} /> My Snippets</h2>
-          <p>Write, save, organize, and export your code</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
+          <div>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><FolderOpen size={18} /> My Snippets</h2>
+            <p>Write, save, organize, and export your code</p>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <span style={{
