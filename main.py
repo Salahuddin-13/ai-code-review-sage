@@ -244,14 +244,6 @@ async def health_check():
     return JSONResponse(content={"status": "ok", "ai_configured": client is not None})
 
 
-@app.get("/{full_path:path}")
-async def serve_spa(full_path: str):
-    """Catch-all: serve React app for any non-API route."""
-    index_path = STATIC_DIR / "index.html"
-    if index_path.exists():
-        return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
-    return HTMLResponse(content="<h1>Code Review Sage — Backend Running ✅</h1><p>Frontend not built. Visit /docs</p>")
-
 
 @app.post("/api/review")
 async def review_code(request: CodeReviewRequest):
@@ -1182,6 +1174,91 @@ Make the problem interesting, practical, and well-structured. The solution MUST 
 
     result = call_groq(system_prompt, user_prompt)
     return JSONResponse(content={"problem": result, "topic": topic, "difficulty": difficulty})
+
+
+# ──────────────────────────────────────────────
+# Code Execution (Piston API proxy)
+# ──────────────────────────────────────────────
+
+# Wandbox API compiler mapping (free, no auth required)
+WANDBOX_LANG_MAP = {
+    "python": "cpython-3.12.7",
+    "javascript": "nodejs-20.17.0",
+    "typescript": "typescript-5.6.2",
+    "java": "openjdk-jdk-22+36",
+    "c": "gcc-head-c",
+    "cpp": "gcc-head",
+    "csharp": "mono-6.12.0.199",
+    "go": "go-1.23.2",
+    "rust": "rust-1.82.0",
+    "ruby": "ruby-3.4.1",
+    "php": "php-8.3.12",
+    "swift": "swift-6.0.1",
+}
+
+
+@app.post("/api/execute")
+async def execute_code(request: ExecuteRequest):
+    """Execute code via Wandbox API (sandboxed)."""
+    if not request.code.strip():
+        raise HTTPException(status_code=400, detail="Code cannot be empty")
+
+    compiler = WANDBOX_LANG_MAP.get(request.language)
+    if not compiler:
+        raise HTTPException(status_code=400, detail=f"Unsupported language: {request.language}")
+
+    payload = {
+        "compiler": compiler,
+        "code": request.code,
+        "stdin": "",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as http_client:
+            resp = await http_client.post(
+                "https://wandbox.org/api/compile.json",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        # Wandbox returns: program_output, program_error, compiler_output, compiler_error
+        compiler_err = data.get("compiler_error", "")
+        program_out = data.get("program_output", "")
+        program_err = data.get("program_error", "")
+        program_msg = data.get("program_message", "")  # combined stdout+stderr
+
+        if compiler_err:
+            output = f"Compilation Error:\n{compiler_err}"
+        elif program_msg:
+            output = program_msg
+        elif program_out:
+            output = program_out + ("\n" + program_err if program_err else "")
+        else:
+            output = "(no output)"
+
+        return JSONResponse(content={"output": output.strip()})
+
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Code execution timed out")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Execution failed: {str(e)}")
+
+
+# ──────────────────────────────────────────────
+# SPA Catch-All (MUST be last)
+# ──────────────────────────────────────────────
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    """Catch-all: serve React app for any non-API route."""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>Code Review Sage — Backend Running ✅</h1><p>Frontend not built. Visit /docs</p>")
+
+
 # ──────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))

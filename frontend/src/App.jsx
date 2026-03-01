@@ -22,6 +22,43 @@ const MONACO_LANG = {
   typescript: 'typescript', php: 'php', ruby: 'ruby', swift: 'swift', kotlin: 'kotlin',
 };
 
+// Shared VS Code-like editor options for all Monaco instances
+const VSCODE_EDITOR_OPTIONS = {
+  minimap: { enabled: false },
+  fontSize: 14,
+  fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
+  fontLigatures: true,
+  scrollBeyondLastLine: false,
+  automaticLayout: true,
+  tabSize: 4,
+  wordWrap: 'on',
+  padding: { top: 10, bottom: 10 },
+  lineNumbers: 'on',
+  renderLineHighlight: 'all',
+  bracketPairColorization: { enabled: true },
+  smoothScrolling: true,
+  cursorBlinking: 'smooth',
+  cursorSmoothCaretAnimation: 'on',
+  // VS Code-like IntelliSense
+  suggestOnTriggerCharacters: true,
+  quickSuggestions: { other: true, comments: true, strings: true },
+  parameterHints: { enabled: true },
+  snippetSuggestions: 'top',
+  wordBasedSuggestions: 'allDocuments',
+  tabCompletion: 'on',
+  acceptSuggestionOnEnter: 'on',
+  suggest: {
+    showMethods: true, showFunctions: true, showConstructors: true,
+    showFields: true, showVariables: true, showClasses: true,
+    showStructs: true, showInterfaces: true, showModules: true,
+    showProperties: true, showEvents: true, showOperators: true,
+    showUnits: true, showValues: true, showConstants: true,
+    showEnums: true, showEnumMembers: true, showKeywords: true,
+    showWords: true, showSnippets: true,
+    preview: true, insertMode: 'replace',
+  },
+};
+
 const TABS = [
   { id: 'review', label: 'Review', icon: Search },
   { id: 'rewrite', label: 'Rewrite', icon: Wand2 },
@@ -543,23 +580,7 @@ function App() {
                           value={code}
                           onChange={(val) => setCode(val || '')}
                           theme={theme === 'dark' ? 'vs-dark' : 'light'}
-                          options={{
-                            minimap: { enabled: true },
-                            fontSize: 13,
-                            fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
-                            fontLigatures: true,
-                            scrollBeyondLastLine: false,
-                            automaticLayout: true,
-                            tabSize: 4,
-                            wordWrap: 'on',
-                            padding: { top: 12 },
-                            lineNumbers: 'on',
-                            renderLineHighlight: 'all',
-                            bracketPairColorization: { enabled: true },
-                            smoothScrolling: true,
-                            cursorBlinking: 'smooth',
-                            cursorSmoothCaretAnimation: 'on',
-                          }}
+                          options={VSCODE_EDITOR_OPTIONS}
                         />
                       </div>
                     </div>
@@ -1054,21 +1075,7 @@ function ConvertPage({ theme, convertSourceCode, setConvertSourceCode, convertSo
                   value={convertSourceCode}
                   onChange={(val) => setConvertSourceCode(val || '')}
                   theme={theme === 'dark' ? 'vs-dark' : 'light'}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 13,
-                    fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
-                    fontLigatures: true,
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    tabSize: 4,
-                    wordWrap: 'on',
-                    padding: { top: 12 },
-                    lineNumbers: 'on',
-                    renderLineHighlight: 'all',
-                    bracketPairColorization: { enabled: true },
-                    smoothScrolling: true,
-                  }}
+                  options={VSCODE_EDITOR_OPTIONS}
                 />
               </div>
             </div>
@@ -1202,21 +1209,7 @@ function ToolPage({ title, subtitle, icon, btnLabel, btnClass, onAction, actionH
                   value={code}
                   onChange={(val) => setCode(val || '')}
                   theme="vs-dark"
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 13,
-                    fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
-                    fontLigatures: true,
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    tabSize: 4,
-                    wordWrap: 'on',
-                    padding: { top: 12 },
-                    lineNumbers: 'on',
-                    renderLineHighlight: 'all',
-                    bracketPairColorization: { enabled: true },
-                    smoothScrolling: true,
-                  }}
+                  options={VSCODE_EDITOR_OPTIONS}
                 />
               </div>
             </div>
@@ -1837,21 +1830,23 @@ function AuthModal({ mode, onClose, onSwitch, onSuccess }) {
 }
 /* ── Practice Mode Page (Redesigned) ── */
 const PRACTICE_TOPICS = [
-  { label: 'Arrays', icon: '📊' }, { label: 'Strings', icon: '🔤' },
-  { label: 'Linked Lists', icon: '🔗' }, { label: 'Trees', icon: '🌳' },
-  { label: 'Graphs', icon: '🕸️' }, { label: 'Dynamic Programming', icon: '🧩' },
-  { label: 'Sorting', icon: '📈' }, { label: 'Searching', icon: '🔍' },
-  { label: 'Stack & Queue', icon: '📚' }, { label: 'Hashing', icon: '#️⃣' },
-  { label: 'Recursion', icon: '🔄' }, { label: 'Greedy', icon: '💰' },
-  { label: 'Backtracking', icon: '↩️' }, { label: 'Two Pointers', icon: '👆' },
-  { label: 'Sliding Window', icon: '🪟' }, { label: 'Binary Search', icon: '🎯' },
-  { label: 'Bit Manipulation', icon: '⚙️' }, { label: 'Math', icon: '🧮' },
+  { label: 'Arrays', icon: '📊', cat: 'ds' }, { label: 'Strings', icon: '🔤', cat: 'ds' },
+  { label: 'Linked Lists', icon: '🔗', cat: 'ds' }, { label: 'Trees', icon: '🌳', cat: 'ds' },
+  { label: 'Graphs', icon: '🕸️', cat: 'ds' }, { label: 'Stack & Queue', icon: '📚', cat: 'ds' },
+  { label: 'Hashing', icon: '#️⃣', cat: 'ds' },
+  { label: 'Dynamic Programming', icon: '🧩', cat: 'algo' }, { label: 'Sorting', icon: '📈', cat: 'algo' },
+  { label: 'Searching', icon: '🔍', cat: 'algo' }, { label: 'Recursion', icon: '🔄', cat: 'algo' },
+  { label: 'Greedy', icon: '💰', cat: 'algo' }, { label: 'Backtracking', icon: '↩️', cat: 'algo' },
+  { label: 'Two Pointers', icon: '👆', cat: 'tech' }, { label: 'Sliding Window', icon: '🪟', cat: 'tech' },
+  { label: 'Binary Search', icon: '🎯', cat: 'tech' }, { label: 'Bit Manipulation', icon: '⚙️', cat: 'tech' },
+  { label: 'Math', icon: '🧮', cat: 'tech' },
 ];
 const DIFFICULTY_COLORS = {
-  easy: { bg: 'rgba(16,185,129,0.15)', color: '#34d399', border: 'rgba(16,185,129,0.3)' },
-  medium: { bg: 'rgba(245,158,11,0.15)', color: '#fbbf24', border: 'rgba(245,158,11,0.3)' },
-  hard: { bg: 'rgba(239,68,68,0.15)', color: '#f87171', border: 'rgba(239,68,68,0.3)' },
+  easy: { bg: 'rgba(16,185,129,0.15)', color: '#34d399', border: 'rgba(16,185,129,0.3)', glow: 'rgba(16,185,129,0.08)' },
+  medium: { bg: 'rgba(245,158,11,0.15)', color: '#fbbf24', border: 'rgba(245,158,11,0.3)', glow: 'rgba(245,158,11,0.08)' },
+  hard: { bg: 'rgba(239,68,68,0.15)', color: '#f87171', border: 'rgba(239,68,68,0.3)', glow: 'rgba(239,68,68,0.08)' },
 };
+const DIFFICULTY_ICONS = { easy: '🌱', medium: '🔥', hard: '💀' };
 
 function PracticePage({ theme, language, setLanguage, loading, showToast }) {
   const [topic, setTopic] = useState('Arrays');
@@ -1859,21 +1854,57 @@ function PracticePage({ theme, language, setLanguage, loading, showToast }) {
   const [problemData, setProblemData] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [solutionCode, setSolutionCode] = useState('');
+  const [isRunning, setIsRunning] = useState(false);
+  const [runOutput, setRunOutput] = useState(null);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [timerActive, setTimerActive] = useState(false);
+  const timerRef = useRef(null);
   const outputRef = useRef(null);
+
+  // Timer logic
+  useEffect(() => {
+    if (timerActive) {
+      timerRef.current = setInterval(() => setTimerSeconds(s => s + 1), 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [timerActive]);
 
   useEffect(() => {
     if (outputRef.current) highlightAllCode(outputRef.current);
   }, [problemData]);
 
+  const formatTime = (s) => {
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleGenerate = async () => {
     setIsGenerating(true);
     setSolutionCode('');
+    setRunOutput(null);
+    setTimerSeconds(0);
+    setTimerActive(false);
     try {
       const data = await api.generatePractice(topic, difficulty, language);
       setProblemData(data);
-      showToast('✅ Problem generated!');
+      setTimerActive(true);
+      showToast('✅ Problem generated! Timer started.');
     } catch (err) { showToast(`❌ ${err.message}`); }
     finally { setIsGenerating(false); }
+  };
+
+  const handleRunSolution = async () => {
+    if (!solutionCode.trim()) { showToast('⚠️ Write your solution first'); return; }
+    setIsRunning(true);
+    setRunOutput('⏳ Running...');
+    try {
+      const result = await api.executeCode(solutionCode, language);
+      setRunOutput(result);
+    } catch (err) { setRunOutput(`❌ Error: ${err.message}`); }
+    finally { setIsRunning(false); }
   };
 
   const dc = DIFFICULTY_COLORS[difficulty];
@@ -1885,7 +1916,22 @@ function PracticePage({ theme, language, setLanguage, loading, showToast }) {
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><BookOpen size={18} /> Practice Mode</h2>
           <p>AI-generated DSA problems — solve, learn, master</p>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          {/* Timer */}
+          {problemData && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+              padding: '0.3rem 0.7rem', borderRadius: '8px',
+              background: timerActive ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+              border: `1px solid ${timerActive ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`,
+              fontFamily: "'Fira Code', monospace", fontSize: '0.82rem', fontWeight: 700,
+              color: timerActive ? '#34d399' : '#f87171',
+              cursor: 'pointer', transition: 'all 0.2s',
+            }} onClick={() => setTimerActive(!timerActive)} title={timerActive ? 'Pause timer' : 'Resume timer'}>
+              <Activity size={13} />
+              {formatTime(timerSeconds)}
+            </div>
+          )}
           <Code2 size={14} style={{ color: 'var(--text-muted)' }} />
           <select className="lang-select" value={language} onChange={(e) => setLanguage(e.target.value)}>
             {LANGUAGES.map((l) => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
@@ -1904,43 +1950,62 @@ function PracticePage({ theme, language, setLanguage, loading, showToast }) {
                 return (
                   <button key={d} onClick={() => setDifficulty(d)}
                     style={{
-                      flex: 1, padding: '0.6rem', border: 'none', cursor: 'pointer',
+                      flex: 1, padding: '0.55rem', border: 'none', cursor: 'pointer',
                       background: difficulty === d ? c.bg : 'transparent',
                       color: difficulty === d ? c.color : 'var(--text-muted)',
-                      fontWeight: difficulty === d ? 700 : 500, fontSize: '0.75rem',
+                      fontWeight: difficulty === d ? 700 : 500, fontSize: '0.73rem',
                       borderBottom: difficulty === d ? `2px solid ${c.color}` : '2px solid transparent',
-                      transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '0.04em',
+                      transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '0.05em',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
                     }}
-                  >{d}</button>
+                  >{DIFFICULTY_ICONS[d]} {d}</button>
                 );
               })}
             </div>
 
-            {/* Topic Grid */}
-            <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--border)', overflowY: 'auto', maxHeight: '180px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.3rem' }}>
-                {PRACTICE_TOPICS.map((t) => (
-                  <button key={t.label} onClick={() => setTopic(t.label)}
-                    style={{
-                      padding: '0.4rem 0.5rem', borderRadius: '6px',
-                      border: topic === t.label ? `1px solid ${dc.border}` : '1px solid var(--border)',
-                      background: topic === t.label ? dc.bg : 'var(--bg-input)',
-                      color: topic === t.label ? dc.color : 'var(--text-secondary)',
-                      fontWeight: topic === t.label ? 600 : 400, fontSize: '0.68rem',
-                      cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
-                      display: 'flex', alignItems: 'center', gap: '0.3rem',
-                    }}
-                  ><span style={{ fontSize: '0.8rem' }}>{t.icon}</span> {t.label}</button>
-                ))}
-              </div>
+            {/* Topic Grid with category headers */}
+            <div style={{ padding: '0.6rem', borderBottom: '1px solid var(--border)', overflowY: 'auto', maxHeight: '200px' }}>
+              {[
+                { key: 'ds', title: '📦 Data Structures' },
+                { key: 'algo', title: '🧠 Algorithms' },
+                { key: 'tech', title: '🔧 Techniques' },
+              ].map(cat => (
+                <div key={cat.key} style={{ marginBottom: '0.35rem' }}>
+                  <div style={{ fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '0.2rem', paddingLeft: '0.15rem' }}>
+                    {cat.title}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginBottom: '0.25rem' }}>
+                    {PRACTICE_TOPICS.filter(t => t.cat === cat.key).map((t) => (
+                      <button key={t.label} onClick={() => setTopic(t.label)}
+                        style={{
+                          padding: '0.3rem 0.5rem', borderRadius: '6px',
+                          border: topic === t.label ? `1px solid ${dc.border}` : '1px solid var(--border)',
+                          background: topic === t.label ? dc.bg : 'var(--bg-input)',
+                          color: topic === t.label ? dc.color : 'var(--text-secondary)',
+                          fontWeight: topic === t.label ? 600 : 400, fontSize: '0.65rem',
+                          cursor: 'pointer', transition: 'all 0.15s',
+                          display: 'flex', alignItems: 'center', gap: '0.25rem',
+                          boxShadow: topic === t.label ? `0 0 8px ${dc.glow}` : 'none',
+                        }}
+                      ><span style={{ fontSize: '0.72rem' }}>{t.icon}</span> {t.label}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Generate Button */}
-            <div style={{ padding: '0.6rem 0.75rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+            <div style={{ padding: '0.5rem 0.6rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)' }}>
               <button className="action-btn btn-review" onClick={handleGenerate}
                 disabled={isGenerating || !!loading}
-                style={{ width: '100%', padding: '0.65rem', fontSize: '0.78rem', background: dc.bg, color: dc.color, border: `1px solid ${dc.border}` }}>
-                {isGenerating ? '⏳ Generating...' : `📝 Generate ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} ${topic}`}
+                style={{
+                  width: '100%', padding: '0.6rem', fontSize: '0.78rem',
+                  background: `linear-gradient(135deg, ${dc.bg}, ${dc.glow})`,
+                  color: dc.color, border: `1px solid ${dc.border}`,
+                  fontWeight: 700, letterSpacing: '0.02em',
+                  boxShadow: `0 2px 12px ${dc.glow}`,
+                }}>
+                {isGenerating ? '⏳ Generating...' : `${DIFFICULTY_ICONS[difficulty]} Generate ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} ${topic}`}
               </button>
             </div>
 
@@ -1956,39 +2021,44 @@ function PracticePage({ theme, language, setLanguage, loading, showToast }) {
                   <span className="editor-label">Your Solution</span>
                 </div>
                 <div style={{ display: 'flex', gap: '0.25rem' }}>
-                  <button className="toolbar-btn" onClick={() => setSolutionCode('')}>
+                  <button className="toolbar-btn" onClick={handleRunSolution} disabled={isRunning}
+                    style={{ color: 'var(--accent-green)', fontWeight: 600 }}>
+                    <Play size={12} fill="currentColor" /> {isRunning ? 'Running...' : 'Run'}
+                  </button>
+                  <button className="toolbar-btn" onClick={() => { setSolutionCode(''); setRunOutput(null); }}>
                     <Trash2 size={12} /> Clear
                   </button>
                 </div>
               </div>
-              <div style={{ flex: 1, minHeight: '200px' }}>
+              <div style={{ flex: 1, minHeight: '300px' }}>
                 <Editor
                   height="100%"
                   language={MONACO_LANG[language] || 'plaintext'}
                   value={solutionCode}
                   onChange={(val) => setSolutionCode(val || '')}
                   theme={theme === 'dark' ? 'vs-dark' : 'light'}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 13,
-                    fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    tabSize: 4,
-                    wordWrap: 'on',
-                    padding: { top: 8 },
-                    lineNumbers: 'on',
-                    renderLineHighlight: 'all',
-                    bracketPairColorization: { enabled: true },
-                    smoothScrolling: true,
-                    suggestOnTriggerCharacters: true,
-                    quickSuggestions: true,
-                    acceptSuggestionOnEnter: 'on',
-                    placeholder: `// Write your ${language} solution here...`,
-                  }}
+                  options={VSCODE_EDITOR_OPTIONS}
                 />
               </div>
             </div>
+
+            {/* Execution Output */}
+            {runOutput !== null && (
+              <div style={{
+                padding: '0.6rem 0.75rem', background: '#0d1117',
+                borderTop: '1px solid var(--border)', maxHeight: '140px', overflowY: 'auto',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: runOutput?.startsWith('❌') ? '#f87171' : 'var(--accent-green)' }}>
+                    <Terminal size={11} /> Output
+                  </span>
+                  <button className="toolbar-btn" onClick={() => setRunOutput(null)} style={{ padding: '0.15rem' }}><Trash2 size={10} /></button>
+                </div>
+                <pre style={{ fontSize: '0.73rem', color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, fontFamily: "'Fira Code', monospace", lineHeight: 1.5 }}>
+                  {runOutput}
+                </pre>
+              </div>
+            )}
           </div>
 
           {/* ── Right Panel: Problem Display ── */}
@@ -1996,33 +2066,64 @@ function PracticePage({ theme, language, setLanguage, loading, showToast }) {
             {isGenerating ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1rem' }}>
                 <div className="loading-spinner"></div>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Generating {difficulty} {topic} problem...</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  {DIFFICULTY_ICONS[difficulty]} Generating {difficulty} {topic} problem...
+                </p>
               </div>
             ) : problemData ? (
-              <div className="output-content" ref={outputRef} style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+              <div className="output-content" ref={outputRef} style={{ padding: '1.25rem' }}>
+                {/* Problem header badges */}
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                   <span style={{
-                    padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 700,
-                    background: dc.bg, color: dc.color, border: `1px solid ${dc.border}`, textTransform: 'uppercase'
+                    padding: '0.2rem 0.55rem', borderRadius: '999px', fontSize: '0.62rem', fontWeight: 700,
+                    background: dc.bg, color: dc.color, border: `1px solid ${dc.border}`, textTransform: 'uppercase',
+                    display: 'flex', alignItems: 'center', gap: '0.2rem',
                   }}>
-                    {difficulty}
+                    {DIFFICULTY_ICONS[difficulty]} {difficulty}
                   </span>
                   <span style={{
-                    padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 600,
-                    background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)'
+                    padding: '0.2rem 0.55rem', borderRadius: '999px', fontSize: '0.62rem', fontWeight: 600,
+                    background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)',
                   }}>
                     {topic}
                   </span>
+                  {timerActive && (
+                    <span style={{
+                      padding: '0.2rem 0.55rem', borderRadius: '999px', fontSize: '0.62rem', fontWeight: 600,
+                      background: 'rgba(16,185,129,0.1)', color: '#34d399', border: '1px solid rgba(16,185,129,0.25)',
+                      fontFamily: "'Fira Code', monospace",
+                    }}>
+                      ⏱ {formatTime(timerSeconds)}
+                    </span>
+                  )}
                 </div>
                 <div className="prose-output" dangerouslySetInnerHTML={{ __html: renderMarkdownToHTML(problemData.problem) }} />
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '2rem' }}>
-                <BookOpen size={56} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: '1rem' }} />
-                <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>Ready to Practice</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', maxWidth: '280px' }}>
-                  Pick a topic and difficulty on the left, then generate a problem. Write your solution in the editor below!
+                <div style={{
+                  width: 72, height: 72, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.08))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem',
+                  border: '1px solid rgba(99,102,241,0.15)',
+                }}>
+                  <BookOpen size={28} style={{ color: '#818cf8', opacity: 0.7 }} />
+                </div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.4rem' }}>Ready to Practice</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.76rem', maxWidth: '300px', lineHeight: 1.5 }}>
+                  Pick a topic and difficulty, then generate a problem. Write your solution and run it to test!
                 </p>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                  {['easy', 'medium', 'hard'].map(d => {
+                    const c = DIFFICULTY_COLORS[d];
+                    return (
+                      <span key={d} style={{
+                        padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.6rem', fontWeight: 600,
+                        background: c.bg, color: c.color, border: `1px solid ${c.border}`,
+                      }}>{DIFFICULTY_ICONS[d]} {d}</span>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -2045,6 +2146,8 @@ function SnippetsPage({ theme, showToast, code, language }) {
   const [viewingSnippet, setViewingSnippet] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionOutput, setExecutionOutput] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
 
   useEffect(() => {
     api.getFolders().then(d => setFolders(d.folders || [])).catch(() => { });
@@ -2063,6 +2166,16 @@ function SnippetsPage({ theme, showToast, code, language }) {
       const d = await api.getFolders();
       setFolders(d.folders || []);
       showToast(`📁 Folder "${newFolderName}" created`);
+    } catch (err) { showToast(`❌ ${err.message}`); }
+  };
+
+  const handleDeleteFolder = async (folderId) => {
+    try {
+      await api.deleteFolder(folderId);
+      const d = await api.getFolders();
+      setFolders(d.folders || []);
+      if (selectedFolder === folderId) setSelectedFolder(null);
+      showToast('🗑️ Folder deleted');
     } catch (err) { showToast(`❌ ${err.message}`); }
   };
 
@@ -2102,9 +2215,24 @@ function SnippetsPage({ theme, showToast, code, language }) {
     showToast('📝 Loaded into editor');
   };
 
-  const filteredSnippets = selectedFolder
+  const getSnippetPreview = (code) => {
+    const lines = (code || '').split('\n').slice(0, 4);
+    return lines.join('\n') + (code.split('\n').length > 4 ? '\n...' : '');
+  };
+
+  const folderSnippetCount = (folderId) => snippets.filter(s => s.folder_id === folderId).length;
+
+  let filteredSnippets = selectedFolder
     ? snippets.filter(s => s.folder_id === selectedFolder)
     : snippets;
+
+  if (searchQuery.trim()) {
+    const q = searchQuery.toLowerCase();
+    filteredSnippets = filteredSnippets.filter(s =>
+      s.title.toLowerCase().includes(q) || s.language.toLowerCase().includes(q) ||
+      (s.notes || '').toLowerCase().includes(q) || (s.code || '').toLowerCase().includes(q)
+    );
+  }
 
   return (
     <div className="main-content" style={{ flex: 1 }}>
@@ -2112,6 +2240,12 @@ function SnippetsPage({ theme, showToast, code, language }) {
         <div>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><FolderOpen size={18} /> My Snippets</h2>
           <p>Write, save, organize, and export your code</p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span style={{
+            padding: '0.25rem 0.6rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 600,
+            background: 'rgba(99,102,241,0.1)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)',
+          }}>{snippets.length} snippet{snippets.length !== 1 ? 's' : ''}</span>
         </div>
       </header>
 
@@ -2170,37 +2304,24 @@ function SnippetsPage({ theme, showToast, code, language }) {
                 value={editorCode}
                 onChange={(val) => setEditorCode(val || '')}
                 theme={theme === 'dark' ? 'vs-dark' : 'light'}
-                options={{
-                  minimap: { enabled: true },
-                  fontSize: 13,
-                  fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
-                  fontLigatures: true,
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  tabSize: 4,
-                  wordWrap: 'on',
-                  padding: { top: 8 },
-                  lineNumbers: 'on',
-                  renderLineHighlight: 'all',
-                  bracketPairColorization: { enabled: true },
-                  smoothScrolling: true,
-                  suggestOnTriggerCharacters: true,
-                  quickSuggestions: { other: true, comments: false, strings: false },
-                  acceptSuggestionOnEnter: 'on',
-                  cursorBlinking: 'smooth',
-                  cursorSmoothCaretAnimation: 'on',
-                }}
+                options={VSCODE_EDITOR_OPTIONS}
               />
             </div>
 
             {/* Execution Output Panel */}
             {executionOutput !== null && (
-              <div style={{ padding: '0.75rem', background: '#0d1117', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', maxHeight: '150px', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent-green)' }}>Output</span>
-                  <button className="toolbar-btn" onClick={() => setExecutionOutput(null)} style={{ padding: '0.2rem' }}><Trash2 size={11} /></button>
+              <div style={{ padding: '0.6rem 0.75rem', background: '#0d1117', borderTop: '1px solid var(--border)', maxHeight: '140px', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <span style={{
+                    display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.68rem', fontWeight: 700,
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    color: executionOutput?.startsWith('❌') ? '#f87171' : 'var(--accent-green)',
+                  }}>
+                    <Terminal size={11} /> Output
+                  </span>
+                  <button className="toolbar-btn" onClick={() => setExecutionOutput(null)} style={{ padding: '0.15rem' }}><Trash2 size={10} /></button>
                 </div>
-                <pre style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, fontFamily: "'Fira Code', monospace" }}>
+                <pre style={{ fontSize: '0.73rem', color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, fontFamily: "'Fira Code', monospace", lineHeight: 1.5 }}>
                   {executionOutput}
                 </pre>
               </div>
@@ -2230,79 +2351,130 @@ function SnippetsPage({ theme, showToast, code, language }) {
           {/* ── Right Panel: Folders + Snippets List ── */}
           <div className="convert-output-panel" style={{ display: 'flex', flexDirection: 'column' }}>
             {/* Folder bar */}
-            <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)' }}>
-              <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Folders</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.5rem' }}>
+            <div style={{ padding: '0.6rem 0.75rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+              <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Folders</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.4rem' }}>
                 <button onClick={() => setSelectedFolder(null)}
                   style={{
-                    padding: '0.25rem 0.6rem', borderRadius: '999px', fontSize: '0.68rem', cursor: 'pointer',
+                    padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.65rem', cursor: 'pointer',
                     border: !selectedFolder ? '1px solid rgba(99,102,241,0.4)' : '1px solid var(--border)',
                     background: !selectedFolder ? 'rgba(99,102,241,0.12)' : 'var(--bg-input)',
                     color: !selectedFolder ? '#818cf8' : 'var(--text-secondary)',
                     fontWeight: !selectedFolder ? 600 : 400,
-                  }}>All ({snippets.length})</button>
+                  }}>📁 All ({snippets.length})</button>
                 {folders.map(f => (
-                  <button key={f.id} onClick={() => setSelectedFolder(f.id)}
-                    style={{
-                      padding: '0.25rem 0.6rem', borderRadius: '999px', fontSize: '0.68rem', cursor: 'pointer',
-                      border: selectedFolder === f.id ? '1px solid rgba(99,102,241,0.4)' : '1px solid var(--border)',
-                      background: selectedFolder === f.id ? 'rgba(99,102,241,0.12)' : 'var(--bg-input)',
-                      color: selectedFolder === f.id ? '#818cf8' : 'var(--text-secondary)',
-                      fontWeight: selectedFolder === f.id ? 600 : 400,
-                    }}>{f.name}</button>
+                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '0' }}>
+                    <button onClick={() => setSelectedFolder(f.id)}
+                      style={{
+                        padding: '0.2rem 0.5rem', borderRadius: '999px 0 0 999px', fontSize: '0.65rem', cursor: 'pointer',
+                        border: selectedFolder === f.id ? '1px solid rgba(99,102,241,0.4)' : '1px solid var(--border)',
+                        borderRight: 'none',
+                        background: selectedFolder === f.id ? 'rgba(99,102,241,0.12)' : 'var(--bg-input)',
+                        color: selectedFolder === f.id ? '#818cf8' : 'var(--text-secondary)',
+                        fontWeight: selectedFolder === f.id ? 600 : 400,
+                      }}>📂 {f.name} ({folderSnippetCount(f.id)})</button>
+                    <button onClick={() => handleDeleteFolder(f.id)} title="Delete folder"
+                      style={{
+                        padding: '0.2rem 0.35rem', borderRadius: '0 999px 999px 0', fontSize: '0.6rem', cursor: 'pointer',
+                        border: selectedFolder === f.id ? '1px solid rgba(99,102,241,0.4)' : '1px solid var(--border)',
+                        borderLeft: '1px solid var(--border)',
+                        background: selectedFolder === f.id ? 'rgba(99,102,241,0.12)' : 'var(--bg-input)',
+                        color: '#f87171',
+                      }}><X size={9} /></button>
+                  </div>
                 ))}
               </div>
               <div style={{ display: 'flex', gap: '0.25rem' }}>
                 <input
-                  style={{ flex: 1, padding: '0.3rem 0.5rem', fontSize: '0.68rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
+                  style={{ flex: 1, padding: '0.3rem 0.5rem', fontSize: '0.65rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                   value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
                   placeholder="New folder..." onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
                 />
-                <button className="toolbar-btn" onClick={handleCreateFolder} style={{ padding: '0.3rem 0.5rem', fontSize: '0.68rem' }}>+ Add</button>
+                <button className="toolbar-btn" onClick={handleCreateFolder} style={{ padding: '0.3rem 0.5rem', fontSize: '0.65rem' }}>+ Add</button>
+              </div>
+            </div>
+
+            {/* Search Bar */}
+            <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.3rem 0.5rem' }}>
+                <Search size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                <input
+                  style={{ flex: 1, padding: '0', fontSize: '0.7rem', background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none' }}
+                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search snippets..."
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-muted)' }}>
+                    <X size={11} />
+                  </button>
+                )}
               </div>
             </div>
 
             {/* Snippets list */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0.6rem' }}>
               {filteredSnippets.length === 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '2rem' }}>
-                  <FolderOpen size={48} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: '0.75rem' }} />
-                  <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.35rem' }}>No Snippets Yet</h3>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Write code in the editor and click "Save Snippet"</p>
+                  <div style={{
+                    width: 64, height: 64, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.08))',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem',
+                    border: '1px solid rgba(99,102,241,0.15)',
+                  }}>
+                    <FolderOpen size={24} style={{ color: '#818cf8', opacity: 0.7 }} />
+                  </div>
+                  <h3 style={{ fontSize: '0.88rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                    {searchQuery ? 'No matches found' : 'No Snippets Yet'}
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', lineHeight: 1.5 }}>
+                    {searchQuery ? 'Try a different search term' : 'Write code in the editor and click "Save Snippet"'}
+                  </p>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gap: '0.4rem' }}>
+                <div style={{ display: 'grid', gap: '0.35rem' }}>
                   {filteredSnippets.map(s => (
                     <div key={s.id}
                       style={{
-                        padding: '0.6rem 0.75rem', background: 'var(--bg-input)', border: '1px solid var(--border)',
-                        borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s',
+                        padding: '0.55rem 0.65rem', background: 'var(--bg-input)', border: '1px solid var(--border)',
+                        borderRadius: '8px', transition: 'all 0.15s border-color',
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      {/* Header row */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.3rem' }}>
                         <div onClick={() => loadSnippetInEditor(s)} style={{ flex: 1, cursor: 'pointer' }}>
-                          <div style={{ fontWeight: 600, fontSize: '0.78rem' }}>{s.title}</div>
-                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                            <span style={{ padding: '0.1rem 0.35rem', borderRadius: '4px', background: 'rgba(99,102,241,0.1)', color: '#818cf8', fontSize: '0.6rem', fontWeight: 600 }}>{s.language}</span>
-                            <span style={{ marginLeft: '0.4rem' }}>{s.created_at}</span>
+                          <div style={{ fontWeight: 600, fontSize: '0.76rem', marginBottom: '0.15rem' }}>{s.title}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                            <span style={{ padding: '0.08rem 0.3rem', borderRadius: '4px', background: 'rgba(99,102,241,0.1)', color: '#818cf8', fontSize: '0.58rem', fontWeight: 600 }}>{s.language}</span>
+                            <span>{s.created_at}</span>
+                            {s.notes && <span>• {s.notes.length > 30 ? s.notes.slice(0, 30) + '…' : s.notes}</span>}
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.2rem', flexShrink: 0 }}>
-                          <button className="toolbar-btn" title="Load in editor" onClick={() => loadSnippetInEditor(s)} style={{ padding: '0.25rem' }}>
-                            <Code2 size={11} />
+                        <div style={{ display: 'flex', gap: '0.15rem', flexShrink: 0 }}>
+                          <button className="toolbar-btn" title="Load in editor" onClick={() => loadSnippetInEditor(s)} style={{ padding: '0.2rem' }}>
+                            <Code2 size={10} />
                           </button>
-                          <button className="toolbar-btn" title="Export" onClick={() => handleExport(s)} style={{ padding: '0.25rem' }}>
-                            <Download size={11} />
+                          <button className="toolbar-btn" title="Export" onClick={() => handleExport(s)} style={{ padding: '0.2rem' }}>
+                            <Download size={10} />
                           </button>
-                          <button className="toolbar-btn" title="Copy" onClick={() => { copyToClipboard(s.code).then(() => showToast('📋 Copied!')); }} style={{ padding: '0.25rem' }}>
-                            <Copy size={11} />
+                          <button className="toolbar-btn" title="Copy" onClick={() => { copyToClipboard(s.code).then(() => showToast('📋 Copied!')); }} style={{ padding: '0.2rem' }}>
+                            <Copy size={10} />
                           </button>
-                          <button className="toolbar-btn" title="Delete" onClick={() => handleDeleteSnippet(s.id)} style={{ padding: '0.25rem', color: 'var(--accent-red)' }}>
-                            <Trash2 size={11} />
+                          <button className="toolbar-btn" title="Delete" onClick={() => handleDeleteSnippet(s.id)} style={{ padding: '0.2rem', color: 'var(--accent-red)' }}>
+                            <Trash2 size={10} />
                           </button>
                         </div>
                       </div>
-                      {s.notes && <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{s.notes}</div>}
+                      {/* Code preview */}
+                      <div onClick={() => loadSnippetInEditor(s)} style={{ cursor: 'pointer' }}>
+                        <pre style={{
+                          fontSize: '0.62rem', lineHeight: 1.4, margin: 0, padding: '0.35rem 0.45rem',
+                          background: '#0d1117', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.05)',
+                          color: '#8b949e', overflow: 'hidden', maxHeight: '65px',
+                          fontFamily: "'Fira Code', monospace", whiteSpace: 'pre', textOverflow: 'ellipsis',
+                        }}>
+                          {getSnippetPreview(s.code)}
+                        </pre>
+                      </div>
                     </div>
                   ))}
                 </div>
